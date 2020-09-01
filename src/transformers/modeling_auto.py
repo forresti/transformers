@@ -42,6 +42,7 @@ from .configuration_auto import (
     ReformerConfig,
     RetriBertConfig,
     RobertaConfig,
+    SqueezeBertConfig,
     T5Config,
     TransfoXLConfig,
     XLMConfig,
@@ -162,6 +163,14 @@ from .modeling_roberta import (
     RobertaForTokenClassification,
     RobertaModel,
 )
+from .modeling_squeezebert import (
+    SqueezeBertForMaskedLM,
+    SqueezeBertForMultipleChoice,
+    SqueezeBertForQuestionAnswering,
+    SqueezeBertForSequenceClassification,
+    SqueezeBertForTokenClassification,
+    SqueezeBertModel,
+)
 from .modeling_t5 import T5ForConditionalGeneration, T5Model
 from .modeling_transfo_xl import TransfoXLLMHeadModel, TransfoXLModel
 from .modeling_xlm import (
@@ -221,6 +230,7 @@ MODEL_MAPPING = OrderedDict(
         (FunnelConfig, FunnelModel),
         (LxmertConfig, LxmertModel),
         (BertGenerationConfig, BertGenerationEncoder),
+        (SqueezeBertConfig, SqueezeBertModel),
     ]
 )
 
@@ -247,6 +257,7 @@ MODEL_FOR_PRETRAINING_MAPPING = OrderedDict(
         (CTRLConfig, CTRLLMHeadModel),
         (ElectraConfig, ElectraForPreTraining),
         (LxmertConfig, LxmertForPreTraining),
+        (SqueezeBertConfig, SqueezeBertForMaskedLM),
     ]
 )
 
@@ -274,6 +285,7 @@ MODEL_WITH_LM_HEAD_MAPPING = OrderedDict(
         (EncoderDecoderConfig, EncoderDecoderModel),
         (ReformerConfig, ReformerModelWithLMHead),
         (FunnelConfig, FunnelForMaskedLM),
+        (SqueezeBertConfig, SqueezeBertForMaskedLM),
     ]
 )
 
@@ -313,6 +325,7 @@ MODEL_FOR_MASKED_LM_MAPPING = OrderedDict(
         (ElectraConfig, ElectraForMaskedLM),
         (ReformerConfig, ReformerForMaskedLM),
         (FunnelConfig, FunnelForMaskedLM),
+        (SqueezeBertConfig, SqueezeBertForMaskedLM),
     ]
 )
 
@@ -344,6 +357,7 @@ MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING = OrderedDict(
         (XLMConfig, XLMForSequenceClassification),
         (ElectraConfig, ElectraForSequenceClassification),
         (FunnelConfig, FunnelForSequenceClassification),
+        (SqueezeBertConfig, SqueezeBertForSequenceClassification),
     ]
 )
 
@@ -364,6 +378,7 @@ MODEL_FOR_QUESTION_ANSWERING_MAPPING = OrderedDict(
         (ElectraConfig, ElectraForQuestionAnswering),
         (ReformerConfig, ReformerForQuestionAnswering),
         (FunnelConfig, FunnelForQuestionAnswering),
+        (SqueezeBertConfig, SqueezeBertForQuestionAnswering),
     ]
 )
 
@@ -383,6 +398,7 @@ MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING = OrderedDict(
         (ElectraConfig, ElectraForTokenClassification),
         (FlaubertConfig, FlaubertForTokenClassification),
         (FunnelConfig, FunnelForTokenClassification),
+        (SqueezeBertConfig, SqueezeBertForTokenClassification),
     ]
 )
 
@@ -401,9 +417,8 @@ MODEL_FOR_MULTIPLE_CHOICE_MAPPING = OrderedDict(
         (XLMConfig, XLMForMultipleChoice),
         (FlaubertConfig, FlaubertForMultipleChoice),
         (FunnelConfig, FunnelForMultipleChoice),
-    ]
+        (SqueezeBertConfig, SqueezeBertForMultipleChoice),
 )
-
 
 AUTO_MODEL_PRETRAINED_DOCSTRING = r"""
 
@@ -929,20 +944,8 @@ class AutoModelForMaskedLM:
         raise ValueError(
             "Unrecognized configuration class {} for this kind of AutoModel: {}.\n"
             "Model type should be one of {}.".format(
-                config.__class__, cls.__name__, ", ".join(c.__name__ for c in MODEL_FOR_MASKED_LM_MAPPING.keys())
-            )
-        )
-
-    @classmethod
-    @replace_list_option_in_docstrings(MODEL_FOR_MASKED_LM_MAPPING)
-    @add_start_docstrings(
-        "Instantiate one of the model classes of the library---with a masked language modeling head---from a "
-        "pretrained model.",
-        AUTO_MODEL_PRETRAINED_DOCSTRING,
-    )
-    def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
-        r"""
         Examples::
+
 
             >>> from transformers import AutoConfig, AutoModelForMaskedLM
 
@@ -1106,7 +1109,6 @@ class AutoModelForSequenceClassification:
             config (:class:`~transformers.PretrainedConfig`):
                 The model class to instantiate is selected based on the configuration class:
 
-                List options
 
         Examples::
 
@@ -1137,6 +1139,7 @@ class AutoModelForSequenceClassification:
     def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
         r"""
         Examples::
+
 
             >>> from transformers import AutoConfig, AutoModelForSequenceClassification
 
@@ -1203,7 +1206,6 @@ class AutoModelForQuestionAnswering:
             config (:class:`~transformers.PretrainedConfig`):
                 The model class to instantiate is selected based on the configuration class:
 
-                List options
 
         Examples::
 
@@ -1302,7 +1304,7 @@ class AutoModelForTokenClassification:
             config (:class:`~transformers.PretrainedConfig`):
                 The model class to instantiate is selected based on the configuration class:
 
-                List options
+
 
         Examples::
 
@@ -1332,8 +1334,7 @@ class AutoModelForTokenClassification:
         AUTO_MODEL_PRETRAINED_DOCSTRING,
     )
     def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
-        r"""
-        Examples::
+
 
             >>> from transformers import AutoConfig, AutoModelForTokenClassification
 
