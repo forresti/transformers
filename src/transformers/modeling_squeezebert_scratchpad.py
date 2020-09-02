@@ -12,8 +12,7 @@ from torch import nn
 import torch.nn.functional as F
 from torch.nn import ModuleList, ModuleDict, Sequential
 
-from arch_search import MixedModule
-from modeling_util import gelu, swish, ACT2FN, MatMulWrapper, transpose_x, is_tracing
+from modeling_util import gelu, swish, ACT2FN
 
 import logging
 logger = logging.getLogger(__name__)
@@ -45,133 +44,48 @@ PyTorch's Conv1d layer expects input data to be in NCW form.
 
 '''
 
-# TODO(forresti): replace assert statements with the following to get rid of warnings in tracing mode.
-def _assert(case, message):
-    is_tracing_mode = (torch._C._get_tracing_state() is not None)
-    if not is_tracing_mode:
-        assert case, message
+def transpose_x(x):
+    return x.permute(0, 2, 1)  # [N, W, C] <--> {N, C, W]
 
-class YotaSuperModule(nn.Module):
+class MatMulWrapper(torch.nn.Module):
+    '''
+    Wrapper for torch.matmul(). A bit silly, but this makes flop-counting easier to implement.
+    '''
     def __init__(self):
         super().__init__()
-        self.mode = 'conv1d'
 
-    # TODO(forresti): do something like SuperNetwork, where we can update all children that are YotaModules.
-    #  Specifically, add a switch_mode() function, which calls switch_mode on all child YotaModules
+    def forward(self, mat1, mat2):
+        '''
 
-class YotaModule(nn.Module, ABC):
-    def __init__(self):
-        nn.Module.__init__(self)
-        ABC.__init__(self)
-        self.mode = 'conv1d'
-        self.forward = self.forward_conv1d
+        :param inputs: two torch tensors
+        :return: matmul of these tensors
 
-    def switch_mode(self, new_mode):
-        assert new_mode in ['conv1d', 'linear'], f"unsupported mode {new_mode}"
-        self.mode = new_mode
+        Here are the typical dimensions found in BERT (the B is optional)
+            mat1.shape: [B, <optional extra dims>, M, K]
+            mat2.shape: [B, <optional extra dims>, K, N]
+            output shape: [B, <optional extra dims>, M, N]
+        '''
+        return torch.matmul(mat1, mat2)
 
-        if new_mode == 'conv1d':
-            self.forward = self.forward_conv1d
-        elif new_mode == 'linear':
-            self.forward = self.forward_linear
 
-    def forward_conv1d(self, *args, **kwargs):
-        return NotImplemented
-
-    def linear(self, *args, **kwargs):
-        return NotImplemented
-
-try:
-    from apex.normalization.fused_layer_norm import FusedLayerNormAffineFunction
-    FusedLayerNorm_is_available = True
-except:
-    pass
-
-class SqueezeBertLayerNorm(nn.LayerNorm, YotaModule):
+class SqueezeBertLayerNorm(nn.LayerNorm):
     def __init__(self, hidden_size, eps=1e-12):
-        YotaModule.__init__(self)
         nn.LayerNorm.__init__(self, normalized_shape=hidden_size, eps=eps) # instantiates self.{weight, bias, eps}
-        self.shape = torch.Size((hidden_size,)) # for FusedLayerNormAffineFunction
 
-    # no need to override YotaModule's self.switch_mode(), because nothing needs to be transposed.
-
-    def apply_layernorm(self, x):
-        if FusedLayerNorm_is_available and (not is_tracing()) and ('cuda' in x.device.type):
-            return FusedLayerNormAffineFunction.apply(x, self.weight, self.bias, self.shape, self.eps)
-        else:
-            return nn.LayerNorm.forward(self, x)
-
-    def forward_conv1d(self, x):
+    def forward(self, x):
         x = x.permute(0, 2, 1)
-        x = self.apply_layernorm(x)
+        x = nn.LayerNorm.forward(self, x)
         return x.permute(0, 2, 1)
-
-    def forward_linear(self, x):
-        return self.apply_layernorm(x)
-
-
-class Conv1d_yota(nn.Conv1d, YotaModule):
-    def __init__(self, in_channels, out_channels, kernel_size, stride=1, padding=0, dilation=1, groups=1, bias=True,
-                 padding_mode='zeros'):
-        YotaModule.__init__(self)
-        nn.Conv1d.__init__(self, in_channels, out_channels, kernel_size, stride, padding, dilation, groups, bias, padding_mode)
-        # note that nn.Conv1d automatically sets self.in_channels=in_channels, self.stride=stride, etc.
-        # so, we retain access to the input arguments
-
-    def switch_mode(self, new_mode):
-        """
-        self.mode='conv1d':
-            self.weight.shape = [cout, cin, ksize]
-        self.mode='linear':
-            self.weight.shape = [cout, cin]
-        """
-        if new_mode == self.mode:
-            return # no mode-change needed
-
-        elif new_mode == 'conv1d':
-            assert self.mode == 'linear' # we are switching from linear to conv1d
-            self.weight.data = self.weight.data.unsqueeze(-1) # [cout, cin] --> [cout, cin, ksize=1]
-
-        elif new_mode == 'linear':
-            required_settings = {'kernel_size': (1,), # note that when you input kernel_size=1, it gets saved as a length-1 tuple.
-                                 'stride': (1,),
-                                 'padding': (0,),
-                                 'dilation': (1,),
-                                 'groups': 1}
-            for setting_name, required_value in required_settings.items():
-                curr_value = getattr(self, setting_name)
-                if curr_value != required_value:
-                    raise ValueError(f"Unable to switch to mode='linear', because self.{setting_name}={curr_value}, "
-                                     f"and linear mode requires self.{setting_name}={required_value}")
-
-            self.weight.data = self.weight.data.squeeze(-1)  # [cout, cin, ksize=1] --> [cout, cin]
-
-        else:
-            raise ValueError(f'requested unknown new_mode: {new_mode}')
-
-        YotaModule.switch_mode(self, new_mode) # update self.mode
-
-    def forward_conv1d(self, x):
-        return nn.Conv1d.forward(self, x) # TODO(forresti): should this have .forward, or not? Does it matter?
-
-    def forward_linear(self, x):
-        num_weight_dims = len(list(self.weight.shape))
-        assert num_weight_dims == 2, f"forward_linear() expects self.weight to have 2 dimensions, but got" \
-                                     f" {num_weight_dims} dimensions."
-
-        # note that, if bias was set to False in __init__(), then self.bias=None, which is compatible with the following
-        return F.linear(input=x, weight=self.weight, bias=self.bias)
 
 
 class CDL(nn.Module):
-    # TODO(forresti): should mid-level classes like this also be YotaSuperModules, so they can call switch_mode() on child YotaModules?
     '''
     CDL: Conv, Dropout, LayerNorm
     '''
     def __init__(self, cin, cout, groups, dropout_prob):
         super().__init__()
 
-        self.conv1d = Conv1d_yota(in_channels=cin, out_channels=cout, kernel_size=1, groups=groups)
+        self.conv1d = nn.Conv1d(in_channels=cin, out_channels=cout, kernel_size=1, groups=groups)
         self.layernorm = SqueezeBertLayerNorm(cout)
         self.dropout = nn.Dropout(dropout_prob)
 
@@ -184,20 +98,19 @@ class CDL(nn.Module):
 
 
 class CA(nn.Module):
-    # TODO(forresti): should mid-level classes like this also be YotaSuperModules, so they can call switch_mode() on child YotaModules?
     '''
     CA: Conv, Activation
     '''
     def __init__(self, cin, cout, groups, act):
         super().__init__()
-        self.conv1d = Conv1d_yota(in_channels=cin, out_channels=cout, kernel_size=1, groups=groups)
+        self.conv1d = nn.Conv1d(in_channels=cin, out_channels=cout, kernel_size=1, groups=groups)
         self.act = ACT2FN[act]
 
     def forward(self, x):
         output = self.conv1d(x)
         return self.act(output)
 
-class SqueezeBertSelfAttention(YotaModule):
+class SqueezeBertSelfAttention(nn.Module):
     def __init__(self, config, cin, q_groups=1, k_groups=1, v_groups=1):
         '''
         config = used for some things; ignored for others (work in progress...)
@@ -213,20 +126,18 @@ class SqueezeBertSelfAttention(YotaModule):
         self.attention_head_size = int(cin / config.num_attention_heads)
         self.all_head_size = self.num_attention_heads * self.attention_head_size
 
-        self.query = Conv1d_yota(in_channels=cin, out_channels=cin, kernel_size=1, groups=q_groups)
-        self.key   = Conv1d_yota(in_channels=cin, out_channels=cin, kernel_size=1, groups=k_groups)
-        self.value = Conv1d_yota(in_channels=cin, out_channels=cin, kernel_size=1, groups=v_groups)
+        self.query = nn.Conv1d(in_channels=cin, out_channels=cin, kernel_size=1, groups=q_groups)
+        self.key   = nn.Conv1d(in_channels=cin, out_channels=cin, kernel_size=1, groups=k_groups)
+        self.value = nn.Conv1d(in_channels=cin, out_channels=cin, kernel_size=1, groups=v_groups)
 
         self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
-        self.softmax = nn.Softmax(dim=-1) # this is unchanged from original code, because it's applied to the output of (Q K^T V), which is in the same format here as in the old code
+        self.softmax = nn.Softmax(dim=-1) # this is unchanged from original BERT code, because it's applied to the output of (Q K^T V), which is in the same format here as in the original code
 
         self.matmul_qk = MatMulWrapper()
         self.matmul_qkv = MatMulWrapper()
 
-    # Note: We don't have a switch_mode() here that updates the mode of the child YotaModules.
-    # That is because the BertModule is supposed to update the mode of all child YotaModules, including this and its children.
 
-    def transpose_for_scores_conv1d(self, x):
+    def transpose_for_scores(self, x):
         '''
         input: [N, C, W]
         output: [N, C1, W, C2]
@@ -236,12 +147,8 @@ class SqueezeBertSelfAttention(YotaModule):
         x = x.view(*new_x_shape)
         return x.permute(0, 1, 3, 2) # [N, C1, C2, W] --> [N, C1, W, C2]
 
-    def transpose_for_scores_linear(self, x):
-        new_x_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
-        x = x.view(*new_x_shape)
-        return x.permute(0, 2, 1, 3)
 
-    def transpose_key_for_scores_conv1d(self, x):
+    def transpose_key_for_scores(self, x):
         '''
         input: [N, C, W]
         output: [N, C1, C2, W]
@@ -252,12 +159,7 @@ class SqueezeBertSelfAttention(YotaModule):
         # no `permute` needed
         return x
 
-    def transpose_key_for_scores_linear(self, x):
-        new_x_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
-        x = x.view(*new_x_shape)
-        return x.permute(0, 2, 3, 1)
-
-    def transpose_output_conv1d(self, x):
+    def transpose_output(self, x):
         '''
         input: [N, C1, W, C2]
         output: [N, C, W]
@@ -267,13 +169,8 @@ class SqueezeBertSelfAttention(YotaModule):
         x = x.view(*new_x_shape)
         return x
 
-    def transpose_output_linear(self, x):
-        x = x.permute(0, 2, 1, 3).contiguous()
-        new_x_shape = x.size()[:-2] + (self.all_head_size,) # [N, W, C]
-        x = x.view(*new_x_shape)
-        return x
 
-    def forward_conv1d(self, hidden_states, attention_mask, output_all_encoded_layers=False):
+    def forward(self, hidden_states, attention_mask, output_all_encoded_layers=False):
         '''
         expects hidden_states in NCW form.
         '''
@@ -281,9 +178,9 @@ class SqueezeBertSelfAttention(YotaModule):
         mixed_key_layer = self.key(hidden_states)
         mixed_value_layer = self.value(hidden_states)
 
-        query_layer = self.transpose_for_scores_conv1d(mixed_query_layer)
-        key_layer = self.transpose_key_for_scores_conv1d(mixed_key_layer)
-        value_layer = self.transpose_for_scores_conv1d(mixed_value_layer)
+        query_layer = self.transpose_for_scores(mixed_query_layer)
+        key_layer = self.transpose_key_for_scores(mixed_key_layer)
+        value_layer = self.transpose_for_scores(mixed_value_layer)
 
         # Take the dot product between "query" and "key" to get the raw attention scores.
         attention_scores = self.matmul_qk(query_layer, key_layer)
@@ -299,41 +196,12 @@ class SqueezeBertSelfAttention(YotaModule):
         attention_probs = self.dropout(attention_probs)
 
         context_layer = self.matmul_qkv(attention_probs, value_layer)
-        context_layer = self.transpose_output_conv1d(context_layer)
+        context_layer = self.transpose_output(context_layer)
         if output_all_encoded_layers:
             return {'attention_scores': attention_scores, 'context_layer': context_layer} # note that TinyBERT also uses attention_scores for distillation
         else:
             return context_layer
 
-    def forward_linear(self, hidden_states, attention_mask):
-        # TODO(forresti): possibly support output_all_encoded_layers in forward_linear
-        '''
-        expects hidden_states in NWC form.
-        '''
-        mixed_query_layer = self.query(hidden_states)
-        mixed_key_layer = self.key(hidden_states)
-        mixed_value_layer = self.value(hidden_states)
-
-        query_layer = self.transpose_for_scores_linear(mixed_query_layer)
-        key_layer = self.transpose_key_for_scores_linear(mixed_key_layer)
-        value_layer = self.transpose_for_scores_linear(mixed_value_layer)
-
-        # Take the dot product between "query" and "key" to get the raw attention scores.
-        attention_scores = self.matmul_qk(query_layer, key_layer)
-        attention_scores = attention_scores / math.sqrt(self.attention_head_size)
-        # Apply the attention mask is (precomputed for all layers in BertModel forward() function)
-        attention_scores = attention_scores + attention_mask
-
-        # Normalize the attention scores to probabilities.
-        attention_probs = self.softmax(attention_scores)
-
-        # This is actually dropping out entire tokens to attend to, which might
-        # seem a bit unusual, but is taken from the original Transformer paper.
-        attention_probs = self.dropout(attention_probs)
-
-        context_layer = self.matmul_qkv(attention_probs, value_layer)
-        context_layer = self.transpose_output_linear(context_layer)
-        return context_layer
 
 class SqueezeBertModule(nn.Module):
     def __init__(self, config, hidden_size, intermediate_size, q_groups=1, k_groups=1, v_groups=1,
@@ -371,8 +239,7 @@ class SqueezeBertModule(nn.Module):
             return layer_output
 
 
-class SqueezeBertEncoder(YotaModule):
-    # TODO(forresti): make this a YotaSuperModule, so it can update the children's modes
+class SqueezeBertEncoder(nn.Module):
     def __init__(self, config):
         super().__init__()
 
@@ -384,11 +251,10 @@ class SqueezeBertEncoder(YotaModule):
         intermediate_groups = getattr(config, 'intermediate_groups', 1)
         post_attention_groups = getattr(config, 'post_attention_groups', 1)
         output_groups = getattr(config, 'output_groups', 1)
-        self.register_buffer('cost', torch.zeros(1)) # TODO(forresti): remove self.cost before releasing, unless we are doing a NAS release
 
         if hasattr(config, 'embedding_size'):
             assert config.embedding_size == hidden_size, "if you want embedding_size != intermediate hidden_size, " \
-                                                         "please add a Conv1d_yota layer beofre the first BertModule " \
+                                                         "please add a Conv1d layer beofre the first BertModule " \
                                                          "that adjusts the number of channels."
 
         layers = [SqueezeBertModule(config, hidden_size=hidden_size, intermediate_size=intermediate_size,
@@ -399,15 +265,8 @@ class SqueezeBertEncoder(YotaModule):
 
         self.layers = nn.ModuleList(*[layers])
 
-    def switch_mode(self, new_mode):
-        # Update the modes of all child modules (at all levels of the model graph)
-        for name, module in self.named_modules():
-            if isinstance(module, YotaModule) and (module is not self): # TODO(forresti): do I need this 'module is not self' to prevent an infinite recursion here?
-                module.switch_mode(new_mode)
 
-        super().switch_mode(new_mode) # TODO(forresti): If I create a YodaSuperModule, I may need to say YotaModule instead of super() here.
-
-    def forward_conv1d(self, hidden_states, attention_mask, output_all_encoded_layers=False, checkpoint_activations=False):
+    def forward(self, hidden_states, attention_mask, output_all_encoded_layers=False, checkpoint_activations=False):
         #assert output_all_encoded_layers == False
         assert checkpoint_activations == False
         x = transpose_x(hidden_states) # [N, W, C] --> [N, C, W]
@@ -430,16 +289,171 @@ class SqueezeBertEncoder(YotaModule):
 
         return result
 
-    def forward_linear(self, hidden_states, attention_mask, output_all_encoded_layers=False, checkpoint_activations=False):
-        assert output_all_encoded_layers == False
-        assert checkpoint_activations == False
-        x = hidden_states
+class SqueezeBertPooler(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.dense = nn.Linear(config.hidden_size, config.hidden_size)
+        self.activation = nn.Tanh()
 
-        # note the lack of transpose_x here, because the input, encoder, and output all use the [N, W, C] data layout.
-        for layer in self.layers:
-            x = layer.forward(x, attention_mask)
+    def forward(self, hidden_states):
+        # We "pool" the model by simply taking the hidden state corresponding
+        # to the first token.
+        first_token_tensor = hidden_states[:, 0]
+        pooled_output = self.dense(first_token_tensor)
+        pooled_output = self.activation(pooled_output)
+        return pooled_output
 
-        # TODO(forresti): add code for checkpoint_activations in linear mode
 
-        return {'encoded_layers': [x], 'cost': self.cost} # TODO(forresti): remove self.cost before releasing, unless we are doing a NAS release
 
+class SqueezeBertPreTrainedModel(PreTrainedModel):
+    """An abstract class to handle weights initialization and
+    a simple interface for downloading and loading pretrained models.
+    """
+
+    config_class = SqueezeBertConfig
+    base_model_prefix = "bert"
+    authorized_missing_keys = [r"position_ids"]
+
+    def _init_weights(self, module):
+        """ Initialize the weights """
+        if isinstance(module, (nn.Linear, nn.Embedding)):
+            # Slightly different from the TF version which uses truncated_normal for initialization
+            # cf https://github.com/pytorch/pytorch/pull/5617
+            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+        elif isinstance(module, SqueezeBertLayerNorm):
+            module.bias.data.zero_()
+            module.weight.data.fill_(1.0)
+        if isinstance(module, nn.Linear) and module.bias is not None:
+            module.bias.data.zero_()
+
+class SqueezeBertModel(SqueezeBertPreTrainedModel):
+    """
+    .. _`SqueezeBert`:
+        https://arxiv.org/abs/2006.11316
+
+    """
+
+    def __init__(self, config):
+        super().__init__(config)
+        self.config = config
+
+        self.embeddings = SqueezeBertEmbeddings(config)
+        self.encoder = SqueezeBertEncoder(config)
+        self.pooler = SqueezeBertPooler(config)
+
+        self.init_weights()
+
+    def get_input_embeddings(self):
+        return self.embeddings.word_embeddings
+
+    def set_input_embeddings(self, value):
+        self.embeddings.word_embeddings = value
+
+    def _prune_heads(self, heads_to_prune):
+        """Prunes heads of the model.
+        heads_to_prune: dict of {layer_num: list of heads to prune in this layer}
+        See base class PreTrainedModel
+        """
+        for layer, heads in heads_to_prune.items():
+            self.encoder.layer[layer].attention.prune_heads(heads)
+
+    @add_start_docstrings_to_callable(BERT_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
+    @add_code_sample_docstrings(
+        tokenizer_class=_TOKENIZER_FOR_DOC,
+        checkpoint="squeezebert-uncased",
+        output_type=BaseModelOutputWithPooling,
+        config_class=_CONFIG_FOR_DOC,
+    )
+    def forward(
+        self,
+        input_ids=None,
+        attention_mask=None,
+        token_type_ids=None,
+        position_ids=None,
+        head_mask=None,
+        inputs_embeds=None,
+        encoder_hidden_states=None,
+        encoder_attention_mask=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        return_dict=None,
+    ):
+        r"""
+        encoder_hidden_states  (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`, defaults to :obj:`None`):
+            Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention
+            if the model is configured as a decoder.
+        encoder_attention_mask (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
+            Mask to avoid performing attention on the padding token indices of the encoder input. This mask
+            is used in the cross-attention if the model is configured as a decoder.
+            Mask values selected in ``[0, 1]``:
+            ``1`` for tokens that are NOT MASKED, ``0`` for MASKED tokens.
+        """
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        if input_ids is not None and inputs_embeds is not None:
+            raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
+        elif input_ids is not None:
+            input_shape = input_ids.size()
+        elif inputs_embeds is not None:
+            input_shape = inputs_embeds.size()[:-1]
+        else:
+            raise ValueError("You have to specify either input_ids or inputs_embeds")
+
+        device = input_ids.device if input_ids is not None else inputs_embeds.device
+
+        if attention_mask is None:
+            attention_mask = torch.ones(input_shape, device=device)
+        if token_type_ids is None:
+            token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=device)
+
+        # We can provide a self-attention mask of dimensions [batch_size, from_seq_length, to_seq_length]
+        # ourselves in which case we just need to make it broadcastable to all heads.
+        extended_attention_mask: torch.Tensor = self.get_extended_attention_mask(attention_mask, input_shape, device)
+
+        # If a 2D ou 3D attention mask is provided for the cross-attention
+        # we need to make broadcastabe to [batch_size, num_heads, seq_length, seq_length]
+        if self.config.is_decoder and encoder_hidden_states is not None:
+            encoder_batch_size, encoder_sequence_length, _ = encoder_hidden_states.size()
+            encoder_hidden_shape = (encoder_batch_size, encoder_sequence_length)
+            if encoder_attention_mask is None:
+                encoder_attention_mask = torch.ones(encoder_hidden_shape, device=device)
+            encoder_extended_attention_mask = self.invert_attention_mask(encoder_attention_mask)
+        else:
+            encoder_extended_attention_mask = None
+
+        # Prepare head mask if needed
+        # 1.0 in head_mask indicate we keep the head
+        # attention_probs has shape bsz x n_heads x N x N
+        # input head_mask has shape [num_heads] or [num_hidden_layers x num_heads]
+        # and head_mask is converted to shape [num_hidden_layers x batch x num_heads x seq_length x seq_length]
+        head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
+
+        embedding_output = self.embeddings(
+            input_ids=input_ids, position_ids=position_ids, token_type_ids=token_type_ids, inputs_embeds=inputs_embeds
+        )
+        encoder_outputs = self.encoder(
+            embedding_output,
+            attention_mask=extended_attention_mask,
+            head_mask=head_mask,
+            encoder_hidden_states=encoder_hidden_states,
+            encoder_attention_mask=encoder_extended_attention_mask,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+        sequence_output = encoder_outputs[0]
+        pooled_output = self.pooler(sequence_output)
+
+        if not return_dict:
+            return (sequence_output, pooled_output) + encoder_outputs[1:]
+
+        return BaseModelOutputWithPooling(
+            last_hidden_state=sequence_output,
+            pooler_output=pooled_output,
+            hidden_states=encoder_outputs.hidden_states,
+            attentions=encoder_outputs.attentions,
+        )

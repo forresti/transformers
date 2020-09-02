@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2018 XXX Authors
+# Copyright 2020 SqueezeBert Authors
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,11 +12,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch XXX model. """
+""" PyTorch SqueezeBert model. """
 
-####################################################
-# In this template, replace all the XXX (various casings) with your model name
-####################################################
 
 
 import logging
@@ -49,61 +46,334 @@ _TOKENIZER_FOR_DOC = "SqueezeBertTokenizer"
 # This list contrains shortcut names for some of
 # the pretrained weights provided with the models
 ####################################################
-XXX_PRETRAINED_MODEL_ARCHIVE_LIST = [
+SQUEEZEBERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "squeezebert-uncased",
     "squeezebert-mnli",
 ]
 
-XxxAttention = nn.Module
+def transpose_x(x):
+    return x.permute(0, 2, 1)  # [N, W, C] <--> {N, C, W]
 
-XxxIntermediate = nn.Module
+ACT2FN = {"gelu": gelu, "relu": torch.nn.functional.relu}
 
-XxxOutput = nn.Module
+class SqueezeBertEmbeddings(nn.Module):
+    """Construct the embeddings from word, position and token_type embeddings."""
 
-
-class XxxLayer(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.attention = XxxAttention(config)
-        self.intermediate = XxxIntermediate(config)
-        self.output = XxxOutput(config)
+        self.word_embeddings = nn.Embedding(config.vocab_size, config.hidden_size, padding_idx=config.pad_token_id)
+        self.position_embeddings = nn.Embedding(config.max_position_embeddings, config.hidden_size)
+        self.token_type_embeddings = nn.Embedding(config.type_vocab_size, config.hidden_size)
 
-    def forward(self, hidden_states, attention_mask=None, head_mask=None):
-        attention_outputs = self.attention(hidden_states, attention_mask, head_mask)
-        attention_output = attention_outputs[0]
-        intermediate_output = self.intermediate(attention_output)
-        layer_output = self.output(intermediate_output, attention_output)
-        outputs = (layer_output,) + attention_outputs[1:]  # add attentions if we output them
-        return outputs
+        # self.LayerNorm is not snake-cased to stick with TensorFlow model variable name and be able to load
+        # any TensorFlow checkpoint file
+        self.LayerNorm = BertLayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.dropout = nn.Dropout(config.hidden_dropout_prob)
+
+        # position_ids (1, len position emb) is contiguous in memory and exported when serialized
+        self.register_buffer("position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)))
+
+    def forward(self, input_ids=None, token_type_ids=None, position_ids=None, inputs_embeds=None):
+        if input_ids is not None:
+            input_shape = input_ids.size()
+        else:
+            input_shape = inputs_embeds.size()[:-1]
+
+        seq_length = input_shape[1]
+
+        if position_ids is None:
+            position_ids = self.position_ids[:, :seq_length]
+
+        if token_type_ids is None:
+            token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=self.position_ids.device)
+
+        if inputs_embeds is None:
+            inputs_embeds = self.word_embeddings(input_ids)
+        position_embeddings = self.position_embeddings(position_ids)
+        token_type_embeddings = self.token_type_embeddings(token_type_ids)
+
+        embeddings = inputs_embeds + position_embeddings + token_type_embeddings
+        embeddings = self.LayerNorm(embeddings)
+        embeddings = self.dropout(embeddings)
+        return embeddings
 
 
-####################################################
-# PreTrainedModel is a sub-class of torch.nn.Module
-# which take care of loading and saving pretrained weights
-# and various common utilities.
-#
-# Here you just need to specify a few (self-explanatory)
-# pointers for your model and the weights initialization
-# method if its not fully covered by PreTrainedModel's default method
-####################################################
+class MatMulWrapper(torch.nn.Module):
+    '''
+    Wrapper for torch.matmul(). This makes flop-counting easier to implement.
+    Note that if you directly call torch.matmul() in your code, the flop counter will typically ignore the flops of the matmul.
+    '''
+    def __init__(self):
+        super().__init__()
 
-XxxLayerNorm = torch.nn.LayerNorm
+    def forward(self, mat1, mat2):
+        '''
 
-XxxEmbeddings = nn.Module
+        :param inputs: two torch tensors
+        :return: matmul of these tensors
 
-XxxEncoder = nn.Module
+        Here are the typical dimensions found in BERT (the B is optional)
+            mat1.shape: [B, <optional extra dims>, M, K]
+            mat2.shape: [B, <optional extra dims>, K, N]
+            output shape: [B, <optional extra dims>, M, N]
+        '''
+        return torch.matmul(mat1, mat2)
 
-XxxPooler = nn.Module
+
+BertLayerNorm = nn.LayerNorm # This uses NWC data layout
 
 
-class XxxPreTrainedModel(PreTrainedModel):
+class SqueezeBertLayerNorm(nn.LayerNorm):
+    '''
+    This is a nn.LayerNorm subclass that accepts NCW data layout and performs normalization in the C dimension.
+
+    N = batch
+    C = channels
+    W = sequence length
+    '''
+    def __init__(self, hidden_size, eps=1e-12):
+        nn.LayerNorm.__init__(self, normalized_shape=hidden_size, eps=eps) # instantiates self.{weight, bias, eps}
+
+    def forward(self, x):
+        x = x.permute(0, 2, 1)
+        x = nn.LayerNorm.forward(self, x)
+        return x.permute(0, 2, 1)
+
+
+class CDL(nn.Module):
+    '''
+    CDL: Conv, Dropout, LayerNorm
+    '''
+    def __init__(self, cin, cout, groups, dropout_prob):
+        super().__init__()
+
+        self.conv1d = nn.Conv1d(in_channels=cin, out_channels=cout, kernel_size=1, groups=groups)
+        self.layernorm = SqueezeBertLayerNorm(cout)
+        self.dropout = nn.Dropout(dropout_prob)
+
+    def forward(self, hidden_states, input_tensor):
+        x = self.conv1d(hidden_states)
+        x = self.dropout(x)
+        x = x + input_tensor
+        x = self.layernorm(x)
+        return x
+
+
+class CA(nn.Module):
+    '''
+    CA: Conv, Activation
+    '''
+    def __init__(self, cin, cout, groups, act):
+        super().__init__()
+        self.conv1d = nn.Conv1d(in_channels=cin, out_channels=cout, kernel_size=1, groups=groups)
+        self.act = ACT2FN[act]
+
+    def forward(self, x):
+        output = self.conv1d(x)
+        return self.act(output)
+
+class SqueezeBertSelfAttention(nn.Module):
+    def __init__(self, config, cin, q_groups=1, k_groups=1, v_groups=1):
+        '''
+        config = used for some things; ignored for others (work in progress...)
+        cin = input channels = output channels
+        groups = number of groups to use in conv1d layers
+        '''
+        super().__init__()
+        if cin % config.num_attention_heads != 0:
+            raise ValueError(
+                "cin (%d) is not a multiple of the number of attention "
+                "heads (%d)" % (cin, config.num_attention_heads))
+        self.num_attention_heads = config.num_attention_heads
+        self.attention_head_size = int(cin / config.num_attention_heads)
+        self.all_head_size = self.num_attention_heads * self.attention_head_size
+
+        self.query = nn.Conv1d(in_channels=cin, out_channels=cin, kernel_size=1, groups=q_groups)
+        self.key   = nn.Conv1d(in_channels=cin, out_channels=cin, kernel_size=1, groups=k_groups)
+        self.value = nn.Conv1d(in_channels=cin, out_channels=cin, kernel_size=1, groups=v_groups)
+
+        self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
+        self.softmax = nn.Softmax(dim=-1) # this is unchanged from original BERT code, because it's applied to the output of (Q K^T V), which is in the same format here as in the original code
+
+        self.matmul_qk = MatMulWrapper()
+        self.matmul_qkv = MatMulWrapper()
+
+
+    def transpose_for_scores(self, x):
+        '''
+        input: [N, C, W]
+        output: [N, C1, W, C2]
+            where C1 is the head index, and C2 is one head's contents
+        '''
+        new_x_shape = (x.size()[0], self.num_attention_heads, self.attention_head_size, x.size()[-1]) # [N, C1, C2, W]
+        x = x.view(*new_x_shape)
+        return x.permute(0, 1, 3, 2) # [N, C1, C2, W] --> [N, C1, W, C2]
+
+
+    def transpose_key_for_scores(self, x):
+        '''
+        input: [N, C, W]
+        output: [N, C1, C2, W]
+            where C1 is the head index, and C2 is one head's contents
+        '''
+        new_x_shape = (x.size()[0], self.num_attention_heads, self.attention_head_size, x.size()[-1]) # [N, C1, C2, W]
+        x = x.view(*new_x_shape)
+        # no `permute` needed
+        return x
+
+    def transpose_output(self, x):
+        '''
+        input: [N, C1, W, C2]
+        output: [N, C, W]
+        '''
+        x = x.permute(0, 1, 3, 2).contiguous() # [N, C1, C2, W]
+        new_x_shape = (x.size()[0], self.all_head_size, x.size()[3]) # [N, C, W]
+        x = x.view(*new_x_shape)
+        return x
+
+
+    def forward(self, hidden_states, attention_mask, output_all_encoded_layers=False):
+        '''
+        expects hidden_states in NCW form.
+        '''
+        mixed_query_layer = self.query(hidden_states)
+        mixed_key_layer = self.key(hidden_states)
+        mixed_value_layer = self.value(hidden_states)
+
+        query_layer = self.transpose_for_scores(mixed_query_layer)
+        key_layer = self.transpose_key_for_scores(mixed_key_layer)
+        value_layer = self.transpose_for_scores(mixed_value_layer)
+
+        # Take the dot product between "query" and "key" to get the raw attention scores.
+        attention_scores = self.matmul_qk(query_layer, key_layer)
+        attention_scores = attention_scores / math.sqrt(self.attention_head_size)
+        # Apply the attention mask is (precomputed for all layers in BertModel forward() function)
+        attention_scores = attention_scores + attention_mask
+
+        # Normalize the attention scores to probabilities.
+        attention_probs = self.softmax(attention_scores)
+
+        # This is actually dropping out entire tokens to attend to, which might
+        # seem a bit unusual, but is taken from the original Transformer paper.
+        attention_probs = self.dropout(attention_probs)
+
+        context_layer = self.matmul_qkv(attention_probs, value_layer)
+        context_layer = self.transpose_output(context_layer)
+        if output_all_encoded_layers:
+            return {'attention_scores': attention_scores, 'context_layer': context_layer} # note that TinyBERT also uses attention_scores for distillation
+        else:
+            return context_layer
+
+
+class SqueezeBertModule(nn.Module):
+    def __init__(self, config, hidden_size, intermediate_size, q_groups=1, k_groups=1, v_groups=1,
+                 intermediate_groups=1, post_attention_groups=1, output_groups=1):
+        '''
+        hidden_size = input chans = output chans for Q, K, V (they are all the same ... for now) = output chans for the module
+        intermediate_size = output chans for intermediate layer
+        groups = number of groups for all layers in the BertModule. (eventually we could change the interface to allow different groups for different layers)
+        '''
+        super().__init__()
+
+        c0 = hidden_size
+        c1 = hidden_size
+        c2 = intermediate_size
+        c3 = hidden_size
+
+        self.attention = SqueezeBertSelfAttention(config=config, cin=c0, q_groups=q_groups,
+                                                k_groups=k_groups, v_groups=v_groups)
+        self.post_attention = CDL(cin=c0, cout=c1, groups=post_attention_groups, dropout_prob=config.hidden_dropout_prob)
+        self.intermediate = CA(cin=c1, cout=c2, groups=intermediate_groups, act=config.hidden_act)
+        self.output = CDL(cin=c2, cout=c3, groups=output_groups, dropout_prob=config.hidden_dropout_prob)
+
+    def forward(self, hidden_states, attention_mask, output_all_encoded_layers):
+        attention_output = self.attention(hidden_states, attention_mask, output_all_encoded_layers)
+        if output_all_encoded_layers:
+            attention_scores = attention_output['attention_scores']
+            attention_output = attention_output['context_layer']
+        post_attention_output = self.post_attention(attention_output, hidden_states)
+        intermediate_output = self.intermediate(post_attention_output)
+        layer_output = self.output(intermediate_output, post_attention_output)
+        if output_all_encoded_layers:
+            # deliberately making 'attention_score' singular, to signify that layer_output's from just 1 layer. the plural attention_scores above is legacy.
+            return {'attention_score': attention_scores, 'feature_map': layer_output}
+        else:
+            return layer_output
+
+
+class SqueezeBertEncoder(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+
+        hidden_size = config.hidden_size
+        intermediate_size = config.intermediate_size
+        q_groups = getattr(config, 'q_groups', 1)
+        k_groups = getattr(config, 'k_groups', 1)
+        v_groups = getattr(config, 'v_groups', 1)
+        intermediate_groups = getattr(config, 'intermediate_groups', 1)
+        post_attention_groups = getattr(config, 'post_attention_groups', 1)
+        output_groups = getattr(config, 'output_groups', 1)
+
+        if hasattr(config, 'embedding_size'):
+            assert config.embedding_size == hidden_size, "if you want embedding_size != intermediate hidden_size, " \
+                                                         "please add a Conv1d layer beofre the first BertModule " \
+                                                         "that adjusts the number of channels."
+
+        layers = [SqueezeBertModule(config, hidden_size=hidden_size, intermediate_size=intermediate_size,
+                                          q_groups=q_groups, k_groups=k_groups, v_groups=v_groups,
+                                          intermediate_groups=intermediate_groups, post_attention_groups=post_attention_groups,
+                                          output_groups=output_groups)
+                                          for _ in range(config.num_hidden_layers)]
+
+        self.layers = nn.ModuleList(*[layers])
+
+
+    def forward(self, hidden_states, attention_mask, output_all_encoded_layers=False, checkpoint_activations=False):
+        #assert output_all_encoded_layers == False
+        assert checkpoint_activations == False
+        x = transpose_x(hidden_states) # [N, W, C] --> [N, C, W]
+
+        attention_scores = []
+        feature_maps = []
+        for layer in self.layers:
+            x = layer.forward(x, attention_mask, output_all_encoded_layers)
+            if output_all_encoded_layers:
+                attention_scores.append(x['attention_score'])
+                feature_maps.append(x['feature_map'])
+                x = x['feature_map'] # to feed to next layer
+
+        x = transpose_x(x) # [N, C, W] --> [N, W, C]
+        result = {'encoded_layers': [x], 'cost': self.cost} # TODO(forresti): remove self.cost before releasing, unless we are doing a NAS release
+
+        if output_all_encoded_layers:
+            result['attention_scores'] = attention_scores
+            result['feature_maps'] = feature_maps
+
+        return result
+
+class SqueezeBertPooler(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.dense = nn.Linear(config.hidden_size, config.hidden_size)
+        self.activation = nn.Tanh()
+
+    def forward(self, hidden_states):
+        # We "pool" the model by simply taking the hidden state corresponding
+        # to the first token.
+        first_token_tensor = hidden_states[:, 0]
+        pooled_output = self.dense(first_token_tensor)
+        pooled_output = self.activation(pooled_output)
+        return pooled_output
+
+
+class SqueezeBertPreTrainedModel(PreTrainedModel):
     """An abstract class to handle weights initialization and
     a simple interface for downloading and loading pretrained models.
     """
 
-    config_class = XxxConfig
-    load_tf_weights = load_tf_weights_in_xxx
-    base_model_prefix = "transformer"
+    config_class = SqueezeBertConfig
+    base_model_prefix = "squeezebert"
+    authorized_missing_keys = [r"position_ids"]
 
     def _init_weights(self, module):
         """ Initialize the weights """
@@ -111,33 +381,53 @@ class XxxPreTrainedModel(PreTrainedModel):
             # Slightly different from the TF version which uses truncated_normal for initialization
             # cf https://github.com/pytorch/pytorch/pull/5617
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-        elif isinstance(module, XxxLayerNorm):
+        elif isinstance(module, SqueezeBertLayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
         if isinstance(module, nn.Linear) and module.bias is not None:
             module.bias.data.zero_()
 
 
-XXX_START_DOCSTRING = r"""    The XXX model was proposed in
-    `XXX: Pre-training of Deep Bidirectional Transformers for Language Understanding
-    <https://arxiv.org/abs/1810.04805>`__ by....
+SQUEEZEBERT_START_DOCSTRING = r"""    The SqueezeBert model was proposed in
+    `SqueezeBERT: What can computer vision teach NLP about efficient neural networks?
+    <https://arxiv.org/abs/2006.11316>`__ by Forrest N. Iandola, Albert E. Shaw, Ravi Krishna, and Kurt W. Keutzer
 
     This model is a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`_ sub-class.
     Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general
     usage and behavior.
 
+    For best results finetuning SqueezeBERT on text classification tasks, it is recommended to use the
+    `squeezebert-mnli` checkpoint as a starting point.
+
     Parameters:
-        config (:class:`~transformers.XxxConfig`): Model configuration class with all the parameters of the model.
+        config (:class:`~transformers.SqueezeBertConfig`): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the configuration.
             Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model weights.
+
+    Internal class hierarchy:
+        SqueezeBertEncoder
+            SqueezeBertModule
+            SqueezeBertSelfAttention
+                CA
+                CDL
+
+    Data dimensions:
+    - N = batch
+    - C = channels (sometimes called "hidden size")
+    - W = seq_len (W is "width" in computer vision CNNs, so we use the same name here)
+
+    Filter dimensions:
+    - N = filter ID
+    - C = channels
+    - W = 1 (at least for now), meaning that filters touch one sequence element at a time
 """
 
-XXX_INPUTS_DOCSTRING = r"""
+SQUEEZEBERT_INPUTS_DOCSTRING = r"""
     Inputs:
         input_ids (:obj:`torch.LongTensor` of shape :obj:`{0}`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using :class:`transformers.XxxTokenizer`.
+            Indices can be obtained using :class:`transformers.SqueezeBertTokenizer`.
             See :func:`transformers.PreTrainedTokenizer.encode` and
             :func:`transformers.PreTrainedTokenizer.__call__` for details.
 
@@ -178,16 +468,16 @@ XXX_INPUTS_DOCSTRING = r"""
 
 
 @add_start_docstrings(
-    "The bare XXX Model transformer outputting raw hidden-states without any specific head on top.",
-    XXX_START_DOCSTRING,
+    "The bare SQUEEZEBERT Model transformer outputting raw hidden-states without any specific head on top.",
+    SQUEEZEBERT_START_DOCSTRING,
 )
-class XxxModel(XxxPreTrainedModel):
+class SqueezeBertModel(SqueezeBertPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
-        self.embeddings = XxxEmbeddings(config)
-        self.encoder = XxxEncoder(config)
-        self.pooler = XxxPooler(config)
+        self.embeddings = SqueezeBertEmbeddings(config)
+        self.encoder = SqueezeBertEncoder(config)
+        self.pooler = SqueezeBertPooler(config)
 
         self.init_weights()
 
@@ -205,10 +495,10 @@ class XxxModel(XxxPreTrainedModel):
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
 
-    @add_start_docstrings_to_callable(XXX_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
+    @add_start_docstrings_to_callable(SQUEEZEBERT_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="xxx-base-uncased",
+        checkpoint="squeezebert-uncased",
         output_type=BaseModelOutputWithPooling,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -274,12 +564,12 @@ class XxxModel(XxxPreTrainedModel):
         )
 
 
-@add_start_docstrings("""XXX Model with a `language modeling` head on top. """, XXX_START_DOCSTRING)
-class XxxForMaskedLM(XxxPreTrainedModel):
+@add_start_docstrings("""SqueezeBert Model with a `language modeling` head on top. """, SQUEEZEBERT_START_DOCSTRING)
+class SqueezeBertForMaskedLM(SqueezeBertPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
-        self.transformer = XxxModel(config)
+        self.transformer = SqueezeBertModel(config)
         self.lm_head = nn.Linear(config.n_embd, config.vocab_size)
 
         self.init_weights()
@@ -287,10 +577,10 @@ class XxxForMaskedLM(XxxPreTrainedModel):
     def get_output_embeddings(self):
         return self.lm_head
 
-    @add_start_docstrings_to_callable(XXX_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
+    @add_start_docstrings_to_callable(SQUEEZEBERT_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="xxx-base-uncased",
+        checkpoint="squeezebert-uncased",
         output_type=MaskedLMOutput,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -349,25 +639,25 @@ class XxxForMaskedLM(XxxPreTrainedModel):
 
 
 @add_start_docstrings(
-    """XXX Model transformer with a sequence classification/regression head on top (a linear layer on top of
+    """SQUEEZEBERT Model transformer with a sequence classification/regression head on top (a linear layer on top of
     the pooled output) e.g. for GLUE tasks. """,
-    XXX_START_DOCSTRING,
+    SQUEEZEBERT_START_DOCSTRING,
 )
-class XxxForSequenceClassification(XxxPreTrainedModel):
+class SqueezeBertForSequenceClassification(SqueezeBertPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
 
-        self.transformer = XxxModel(config)
+        self.transformer = SqueezeBertModel(config)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.classifier = nn.Linear(config.hidden_size, self.config.num_labels)
 
         self.init_weights()
 
-    @add_start_docstrings_to_callable(XXX_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
+    @add_start_docstrings_to_callable(SQUEEZEBERT_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="xxx-base-uncased",
+        checkpoint="squeezebert-uncased",
         output_type=SequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -433,24 +723,24 @@ class XxxForSequenceClassification(XxxPreTrainedModel):
 
 
 @add_start_docstrings(
-    """XXX Model with a multiple choice classification head on top (a linear layer on top of
+    """SQUEEZEBERT Model with a multiple choice classification head on top (a linear layer on top of
     the pooled output and a softmax) e.g. for RocStories/SWAG tasks. """,
-    XXX_START_DOCSTRING,
+    SQUEEZEBERT_START_DOCSTRING,
 )
-class XxxForMultipleChoice(XxxPreTrainedModel):
+class SqueezeBertForMultipleChoice(SqueezeBertPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
-        self.transformer = XxxModel(config)
+        self.transformer = SqueezeBertModel(config)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.classifier = nn.Linear(config.hidden_size, 1)
 
         self.init_weights()
 
-    @add_start_docstrings_to_callable(XXX_INPUTS_DOCSTRING.format("(batch_size, num_choices, sequence_length)"))
+    @add_start_docstrings_to_callable(SQUEEZEBERT_INPUTS_DOCSTRING.format("(batch_size, num_choices, sequence_length)"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="xxx-base-uncased",
+        checkpoint="squeezebert-uncased",
         output_type=MultipleChoiceModelOutput,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -522,25 +812,25 @@ class XxxForMultipleChoice(XxxPreTrainedModel):
 
 
 @add_start_docstrings(
-    """XXX Model with a token classification head on top (a linear layer on top of
+    """SQUEEZEBERT Model with a token classification head on top (a linear layer on top of
     the hidden-states output) e.g. for Named-Entity-Recognition (NER) tasks. """,
-    XXX_START_DOCSTRING,
+    SQUEEZEBERT_START_DOCSTRING,
 )
-class XxxForTokenClassification(XxxPreTrainedModel):
+class SqueezeBertForTokenClassification(SqueezeBertPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
 
-        self.transformer = XxxModel(config)
+        self.transformer = SqueezeBertModel(config)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.classifier = nn.Linear(config.hidden_size, config.num_labels)
 
         self.init_weights()
 
-    @add_start_docstrings_to_callable(XXX_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
+    @add_start_docstrings_to_callable(SQUEEZEBERT_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="xxx-base-uncased",
+        checkpoint="squeezebert-uncased",
         output_type=TokenClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -608,24 +898,24 @@ class XxxForTokenClassification(XxxPreTrainedModel):
 
 
 @add_start_docstrings(
-    """XXX Model with a span classification head on top for extractive question-answering tasks like SQuAD (a linear
+    """SQUEEZEBERT Model with a span classification head on top for extractive question-answering tasks like SQuAD (a linear
     layers on top of the hidden-states output to compute `span start logits` and `span end logits`). """,
-    XXX_START_DOCSTRING,
+    SQUEEZEBERT_START_DOCSTRING,
 )
-class XxxForQuestionAnswering(XxxPreTrainedModel):
+class SqueezeBertForQuestionAnswering(SqueezeBertPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
 
-        self.transformer = XxxModel(config)
+        self.transformer = SqueezeBertModel(config)
         self.qa_outputs = nn.Linear(config.hidden_size, config.num_labels)
 
         self.init_weights()
 
-    @add_start_docstrings_to_callable(XXX_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
+    @add_start_docstrings_to_callable(SQUEEZEBERT_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="xxx-base-uncased",
+        checkpoint="squeezebert-uncased",
         output_type=QuestionAnsweringModelOutput,
         config_class=_CONFIG_FOR_DOC,
     )
