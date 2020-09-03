@@ -27,6 +27,7 @@ from .activations import gelu
 from .configuration_squeezebert import SqueezeBertConfig
 from .file_utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_callable
 from .modeling_outputs import (
+    BaseModelOutput,
     BaseModelOutputWithPooling,
     MaskedLMOutput,
     MultipleChoiceModelOutput,
@@ -232,9 +233,11 @@ class SqueezeBertSelfAttention(nn.Module):
         return x
 
 
-    def forward(self, hidden_states, attention_mask, output_all_encoded_layers=False):
+    def forward(self, hidden_states, attention_mask, output_attentions):
         '''
-        expects hidden_states in NCW form.
+        expects hidden_states in [N, C, W] data layout.
+
+        The attention_mask data layout is [N, W], and it does not need to be transposed.
         '''
         mixed_query_layer = self.query(hidden_states)
         mixed_key_layer = self.key(hidden_states)
@@ -245,13 +248,13 @@ class SqueezeBertSelfAttention(nn.Module):
         value_layer = self.transpose_for_scores(mixed_value_layer)
 
         # Take the dot product between "query" and "key" to get the raw attention scores.
-        attention_scores = self.matmul_qk(query_layer, key_layer)
-        attention_scores = attention_scores / math.sqrt(self.attention_head_size)
+        attention_score = self.matmul_qk(query_layer, key_layer)
+        attention_score = attention_score / math.sqrt(self.attention_head_size)
         # Apply the attention mask is (precomputed for all layers in BertModel forward() function)
-        attention_scores = attention_scores + attention_mask
+        attention_score = attention_score + attention_mask
 
         # Normalize the attention scores to probabilities.
-        attention_probs = self.softmax(attention_scores)
+        attention_probs = self.softmax(attention_score)
 
         # This is actually dropping out entire tokens to attend to, which might
         # seem a bit unusual, but is taken from the original Transformer paper.
@@ -259,15 +262,15 @@ class SqueezeBertSelfAttention(nn.Module):
 
         context_layer = self.matmul_qkv(attention_probs, value_layer)
         context_layer = self.transpose_output(context_layer)
-        if output_all_encoded_layers:
-            return {'attention_scores': attention_scores, 'context_layer': context_layer} # note that TinyBERT also uses attention_scores for distillation
-        else:
-            return context_layer
+
+        result = {'context_layer': context_layer}
+        if output_attentions:
+            result['attention_score'] = attention_score
+        return result
 
 
 class SqueezeBertModule(nn.Module):
-    def __init__(self, config, hidden_size, intermediate_size, q_groups=1, k_groups=1, v_groups=1,
-                 intermediate_groups=1, post_attention_groups=1, output_groups=1):
+    def __init__(self, config):
         '''
         hidden_size = input chans = output chans for Q, K, V (they are all the same ... for now) = output chans for the module
         intermediate_size = output chans for intermediate layer
@@ -275,81 +278,89 @@ class SqueezeBertModule(nn.Module):
         '''
         super().__init__()
 
-        c0 = hidden_size
-        c1 = hidden_size
-        c2 = intermediate_size
-        c3 = hidden_size
+        c0 = config.hidden_size
+        c1 = config.hidden_size
+        c2 = config.intermediate_size
+        c3 = config.hidden_size
 
-        self.attention = SqueezeBertSelfAttention(config=config, cin=c0, q_groups=q_groups,
-                                                k_groups=k_groups, v_groups=v_groups)
-        self.post_attention = CDL(cin=c0, cout=c1, groups=post_attention_groups, dropout_prob=config.hidden_dropout_prob)
-        self.intermediate = CA(cin=c1, cout=c2, groups=intermediate_groups, act=config.hidden_act)
-        self.output = CDL(cin=c2, cout=c3, groups=output_groups, dropout_prob=config.hidden_dropout_prob)
+        self.attention = SqueezeBertSelfAttention(config=config, cin=c0, q_groups=config.q_groups,
+                                                  k_groups=config.k_groups, v_groups=config.v_groups)
+        self.post_attention = CDL(cin=c0, cout=c1, groups=config.post_attention_groups, dropout_prob=config.hidden_dropout_prob)
+        self.intermediate = CA(cin=c1, cout=c2, groups=config.intermediate_groups, act=config.hidden_act)
+        self.output = CDL(cin=c2, cout=c3, groups=config.output_groups, dropout_prob=config.hidden_dropout_prob)
 
-    def forward(self, hidden_states, attention_mask, output_all_encoded_layers):
-        attention_output = self.attention(hidden_states, attention_mask, output_all_encoded_layers)
-        if output_all_encoded_layers:
-            attention_scores = attention_output['attention_scores']
-            attention_output = attention_output['context_layer']
+    def forward(self, hidden_states, attention_mask, output_attentions):
+        att = self.attention(hidden_states, attention_mask, output_attentions)
+        attention_output = att['context_layer']
+
         post_attention_output = self.post_attention(attention_output, hidden_states)
         intermediate_output = self.intermediate(post_attention_output)
         layer_output = self.output(intermediate_output, post_attention_output)
-        if output_all_encoded_layers:
-            # deliberately making 'attention_score' singular, to signify that layer_output's from just 1 layer. the plural attention_scores above is legacy.
-            return {'attention_score': attention_scores, 'feature_map': layer_output}
-        else:
-            return layer_output
+
+        result = {'feature_map': layer_output}
+        if output_attentions:
+            result['attention_score'] = att['attention_score']
+
+        return result
 
 
 class SqueezeBertEncoder(nn.Module):
     def __init__(self, config):
         super().__init__()
 
-        hidden_size = config.hidden_size
-        intermediate_size = config.intermediate_size
-        q_groups = getattr(config, 'q_groups', 1)
-        k_groups = getattr(config, 'k_groups', 1)
-        v_groups = getattr(config, 'v_groups', 1)
-        intermediate_groups = getattr(config, 'intermediate_groups', 1)
-        post_attention_groups = getattr(config, 'post_attention_groups', 1)
-        output_groups = getattr(config, 'output_groups', 1)
+        assert config.embedding_size == config.hidden_size, "If you want embedding_size != intermediate hidden_size," \
+                                                            "please insert a Conv1d layer to adjust the number of channels " \
+                                                            "before the first SqueezeBertModule."
 
-        if hasattr(config, 'embedding_size'):
-            assert config.embedding_size == hidden_size, "if you want embedding_size != intermediate hidden_size, " \
-                                                         "please add a Conv1d layer beofre the first BertModule " \
-                                                         "that adjusts the number of channels."
-
-        layers = [SqueezeBertModule(config, hidden_size=hidden_size, intermediate_size=intermediate_size,
-                                          q_groups=q_groups, k_groups=k_groups, v_groups=v_groups,
-                                          intermediate_groups=intermediate_groups, post_attention_groups=post_attention_groups,
-                                          output_groups=output_groups)
-                                          for _ in range(config.num_hidden_layers)]
-
+        layers = [SqueezeBertModule(config) for _ in range(config.num_hidden_layers)]
         self.layers = nn.ModuleList(*[layers])
 
+    def forward(
+        self,
+        hidden_states,
+        attention_mask=None,
+        head_mask=None,
+        encoder_hidden_states=None,
+        encoder_attention_mask=None,
+        output_attentions=False,
+        output_hidden_states=False,
+        return_dict=False,
+    ):
 
-    def forward(self, hidden_states, attention_mask, output_all_encoded_layers=False, checkpoint_activations=False):
-        #assert output_all_encoded_layers == False
-        assert checkpoint_activations == False
-        x = transpose_x(hidden_states) # [N, W, C] --> [N, C, W]
+        assert head_mask==None, "head_mask is not yet supported in the SqueezeBert implementation."
+        assert encoder_hidden_states==None, "encoder_hidden_states is not yet supported in the SqueezeBert implementation."
+        assert encoder_attention_mask==None, "encoder_attention_mask is not yet supported in the SqueezeBert implementation. However, note that attention_mask is supported."
 
-        attention_scores = []
-        feature_maps = []
+        hidden_states = transpose_x(hidden_states) # [N, W, C] --> [N, C, W]
+
+        all_hidden_states = () if output_hidden_states else None
+        all_attentions = () if output_attentions else None
+
         for layer in self.layers:
-            x = layer.forward(x, attention_mask, output_all_encoded_layers)
-            if output_all_encoded_layers:
-                attention_scores.append(x['attention_score'])
-                feature_maps.append(x['feature_map'])
-                x = x['feature_map'] # to feed to next layer
+            layer_output = layer.forward(hidden_states, attention_mask, output_attentions)
 
-        x = transpose_x(x) # [N, C, W] --> [N, W, C]
-        result = {'encoded_layers': [x], 'cost': self.cost} # TODO(forresti): remove self.cost before releasing, unless we are doing a NAS release
+            if output_attentions:
+                all_attentions + (layer_output['attention_score'],)
+            if output_hidden_states:
+                all_hidden_states + (layer_output['feature_map'],)
+            hidden_states = layer_output['feature_map']
 
-        if output_all_encoded_layers:
-            result['attention_scores'] = attention_scores
-            result['feature_maps'] = feature_maps
+        hidden_states = transpose_x(hidden_states) # [N, C, W] --> [N, W, C]
 
-        return result
+        """
+            In the following, the data layouts are...
+                hidden_states is in [N, W, C] layout, which is compatible with nn.Linear layers and with the Pooler
+                all_hidden_states and all_attentions are in [N, C, W] layout, which is compatible with nn.Conv1d layers.
+
+            - N = batch
+            - C = channels (sometimes called "hidden size")
+            - W = seq_len (W is "width" in computer vision CNNs, so we use the same name here)
+        """
+        if not return_dict:
+            return tuple(v for v in [hidden_states, all_hidden_states, all_attentions] if v is not None)
+        return BaseModelOutput(
+            last_hidden_state=hidden_states, hidden_states=all_hidden_states, attentions=all_attentions
+        )
 
 class SqueezeBertPooler(nn.Module):
     def __init__(self, config):
@@ -544,8 +555,6 @@ class SqueezeBertModel(SqueezeBertPreTrainedModel):
         # and head_mask is converted to shape [num_hidden_layers x batch x num_heads x seq_length x seq_length]
         head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
 
-        ##################################
-        # Replace this with your model code
         embedding_output = self.embeddings(
             input_ids=input_ids, position_ids=position_ids, token_type_ids=token_type_ids, inputs_embeds=inputs_embeds
         )
