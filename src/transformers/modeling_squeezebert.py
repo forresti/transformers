@@ -52,6 +52,9 @@ SQUEEZEBERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "squeezebert-mnli",
 ]
 
+SqueezeBertForPreTraining = nn.Module
+SqueezeBertForNextSentencePrediction = nn.Module
+
 def transpose_x(x):
     return x.permute(0, 2, 1)  # [N, W, C] <--> {N, C, W]
 
@@ -422,15 +425,14 @@ SQUEEZEBERT_START_DOCSTRING = r"""    The SqueezeBert model was proposed in
                 CA
                 CDL
 
-    Data dimensions:
+    Input data is in [N, W, C] format.
+    Data inside the encoder is in [N, C, W] format.
+    The final output of the encoder is in [N, W, C] format.
+
+    Such that...
     - N = batch
     - C = channels (sometimes called "hidden size")
     - W = seq_len (W is "width" in computer vision CNNs, so we use the same name here)
-
-    Filter dimensions:
-    - N = filter ID
-    - C = channels
-    - W = 1 (at least for now), meaning that filters touch one sequence element at a time
 """
 
 SQUEEZEBERT_INPUTS_DOCSTRING = r"""

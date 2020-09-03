@@ -19,7 +19,7 @@ from .utils import logging
 logger = logging.get_logger(__name__)
 
 SQUEEZEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "squeezebert-uncased": "https://s3.amazonaws.com/models.huggingface.co/TODO/squeezebert-uncased-config.json",
+    "squeezebert-uncased": "https://s3.amazonaws.com/models.huggingface.co/squeezebert/squeezebert-uncased-config.json",
 }
 
 
