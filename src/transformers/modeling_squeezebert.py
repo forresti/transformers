@@ -17,6 +17,7 @@
 
 
 import logging
+import math
 import os
 
 import torch
@@ -330,7 +331,14 @@ class SqueezeBertEncoder(nn.Module):
         return_dict=False,
     ):
 
-        assert head_mask==None, "head_mask is not yet supported in the SqueezeBert implementation."
+        if head_mask is None:
+            head_mask_is_all_none = True
+        elif head_mask.count(None) == len(head_mask):
+            head_mask_is_all_none = True
+        else:
+            head_mask_is_all_none = False
+
+        assert head_mask_is_all_none==True, "head_mask is not yet supported in the SqueezeBert implementation."
         assert encoder_hidden_states==None, "encoder_hidden_states is not yet supported in the SqueezeBert implementation."
         assert encoder_attention_mask==None, "encoder_attention_mask is not yet supported in the SqueezeBert implementation. However, note that attention_mask is supported."
 
