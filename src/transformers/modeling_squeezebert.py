@@ -51,6 +51,7 @@ _TOKENIZER_FOR_DOC = "SqueezeBertTokenizer"
 SQUEEZEBERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "squeezebert-uncased",
     "squeezebert-mnli",
+    "squeezebert-mnli-headless",
 ]
 
 SqueezeBertForPreTraining = nn.Module
@@ -419,7 +420,7 @@ SQUEEZEBERT_START_DOCSTRING = r"""    The SqueezeBert model was proposed in
     usage and behavior.
 
     For best results finetuning SqueezeBERT on text classification tasks, it is recommended to use the
-    `squeezebert-mnli` checkpoint as a starting point.
+    `squeezebert-mnli-headless` checkpoint as a starting point.
 
     Parameters:
         config (:class:`~transformers.SqueezeBertConfig`): Model configuration class with all the parameters of the model.

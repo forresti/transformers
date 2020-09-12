@@ -36,7 +36,7 @@ Tips:
   It is therefore efficient at predicting masked tokens and at NLU in general, but is not optimal for
   text generation. Models trained with a causal language modeling (CLM) objective are better in that regard.
 - For best results when finetuning on sequence classification tasks, it is recommended to start with the
-  `squeezebert-mnli` checkpoint.
+  `squeezebert-mnli-headless` checkpoint.
 
 SqueezeBertConfig
 ~~~~~~~~~~~~~~~~~~~~~
