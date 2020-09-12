@@ -107,7 +107,8 @@ class SqueezeBertEmbeddings(nn.Module):
 class MatMulWrapper(torch.nn.Module):
     '''
     Wrapper for torch.matmul(). This makes flop-counting easier to implement.
-    Note that if you directly call torch.matmul() in your code, the flop counter will typically ignore the flops of the matmul.
+    Note that if you directly call torch.matmul() in your code, the flop counter will typically
+    ignore the flops of the matmul.
     '''
     def __init__(self):
         super().__init__()
@@ -199,7 +200,7 @@ class SqueezeBertSelfAttention(nn.Module):
         self.value = nn.Conv1d(in_channels=cin, out_channels=cin, kernel_size=1, groups=v_groups)
 
         self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
-        self.softmax = nn.Softmax(dim=-1) # this is unchanged from original BERT code, because it's applied to the output of (Q K^T V), which is in the same format here as in the original code
+        self.softmax = nn.Softmax(dim=-1)
 
         self.matmul_qk = MatMulWrapper()
         self.matmul_qkv = MatMulWrapper()
@@ -279,7 +280,8 @@ class SqueezeBertModule(nn.Module):
         '''
         hidden_size = input chans = output chans for Q, K, V (they are all the same ... for now) = output chans for the module
         intermediate_size = output chans for intermediate layer
-        groups = number of groups for all layers in the BertModule. (eventually we could change the interface to allow different groups for different layers)
+        groups = number of groups for all layers in the BertModule. (eventually we could change the interface to allow
+                 different groups for different layers)
         '''
         super().__init__()
 
@@ -341,7 +343,8 @@ class SqueezeBertEncoder(nn.Module):
 
         assert head_mask_is_all_none==True, "head_mask is not yet supported in the SqueezeBert implementation."
         assert encoder_hidden_states==None, "encoder_hidden_states is not yet supported in the SqueezeBert implementation."
-        assert encoder_attention_mask==None, "encoder_attention_mask is not yet supported in the SqueezeBert implementation. However, note that attention_mask is supported."
+        assert encoder_attention_mask==None, "encoder_attention_mask is not yet supported in the SqueezeBert implementation." \
+                                            "However, note that attention_mask is supported."
 
         hidden_states = transpose_x(hidden_states) # [N, W, C] --> [N, C, W]
 
