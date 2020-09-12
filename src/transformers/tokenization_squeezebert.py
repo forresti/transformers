@@ -23,7 +23,7 @@ VOCAB_FILES_NAMES = {"vocab_file": "vocab.txt"}
 
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
-        "squeezebert-uncased": "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-uncased-vocab.txt",
+        "squeezebert-uncased": "https://s3.amazonaws.com/models.huggingface.co/squeezebert/squeezebert-uncased-vocab.txt",
     }
 }
 
