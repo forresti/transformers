@@ -395,8 +395,6 @@ if is_torch_available():
         SQUEEZEBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
         SqueezeBertForMaskedLM,
         SqueezeBertForMultipleChoice,
-        SqueezeBertForNextSentencePrediction,
-        SqueezeBertForPreTraining,
         SqueezeBertForQuestionAnswering,
         SqueezeBertForSequenceClassification,
         SqueezeBertForTokenClassification,

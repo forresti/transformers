@@ -149,7 +149,6 @@ from .modeling_roberta import (
 from .modeling_squeezebert import (
     SqueezeBertForMaskedLM,
     SqueezeBertForMultipleChoice,
-    SqueezeBertForPreTraining,
     SqueezeBertForQuestionAnswering,
     SqueezeBertForSequenceClassification,
     SqueezeBertForTokenClassification,
@@ -234,7 +233,7 @@ MODEL_FOR_PRETRAINING_MAPPING = OrderedDict(
         (XLMConfig, XLMWithLMHeadModel),
         (CTRLConfig, CTRLLMHeadModel),
         (ElectraConfig, ElectraForPreTraining),
-        (SqueezeBertConfig, SqueezeBertForPreTraining)
+        (SqueezeBertConfig, SqueezeBertForMaskedLM)
     ]
 )
 
@@ -591,7 +590,6 @@ class AutoModelForPreTraining:
                 - isInstance of `xlm` configuration class: :class:`~transformers.XLMWithLMHeadModel` (XLM model)
                 - isInstance of `flaubert` configuration class: :class:`~transformers.FlaubertWithLMHeadModel` (Flaubert model)
                 - isInstance of `electra` configuration class: :class:`~transformers.ElectraForPreTraining` (Electra model)
-                - isInstance of `squeezebert` configuration class: :class:`~transformers.SqueezeBertForPreTraining` (SqueezeBert model)
 
         Examples::
 
@@ -632,7 +630,6 @@ class AutoModelForPreTraining:
             - `ctrl`: :class:`~transformers.CTRLLMHeadModel` (Salesforce CTRL model)
             - `flaubert`: :class:`~transformers.FlaubertWithLMHeadModel` (Flaubert model)
             - `electra`: :class:`~transformers.ElectraForPreTraining` (Electra model)
-            - `squeezebert`: :class:`~transformers.SqueezeBertForPreTraining` (SqueezeBert model)
 
         The model is set in evaluation mode by default using `model.eval()` (Dropout modules are deactivated)
         To train the model, you should first set it back in training mode with `model.train()`

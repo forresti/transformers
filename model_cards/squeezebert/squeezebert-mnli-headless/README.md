@@ -19,7 +19,8 @@ The authors found that SqueezeBERT is 4.3x faster than `bert-base-uncased` on a 
 - [English Wikipedia](https://en.wikipedia.org/wiki/English_Wikipedia)
 
 ### Pretraining procedure
-The model is pretrained using the Masked Language Model (MLM) and Sentence Order Prediction (SOP) tasks. (Author's note: If you decide to pretrain your own model, and you prefer to use Next Sentence Prediction (NSP) instead of SOP, that should work too.)
+The model is pretrained using the Masked Language Model (MLM) and Sentence Order Prediction (SOP) tasks.
+(Author's note: If you decide to pretrain your own model, and you prefer to train with MLM only, that should work too.)
 
 From the SqueezeBERT paper:
 > We pretrain SqueezeBERT from scratch (without distillation) using the [LAMB](https://arxiv.org/abs/1904.00962) optimizer, and we employ the hyperparameters recommended by the LAMB authors: a global batch size of 8192, a learning rate of 2.5e-3, and a warmup proportion of 0.28. Following the LAMB paper's recommendations, we pretrain for 56k steps with a maximum sequence length of 128 and then for 6k steps with a maximum sequence length of 512.

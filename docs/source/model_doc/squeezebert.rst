@@ -63,7 +63,7 @@ SqueezeBertTokenizerFast
 SqueezeBert specific outputs
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. autoclass:: transformers.modeling_squeezebert.SqueezeBertForPreTrainingOutput
+.. autoclass::
     :members:
 
 
@@ -74,24 +74,10 @@ SqueezeBertModel
     :members:
 
 
-SqueezeBertForPreTraining
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-.. autoclass:: transformers.SqueezeBertForPreTraining
-    :members:
-
-
 SqueezeBertForMaskedLM
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.SqueezeBertForMaskedLM
-    :members:
-
-
-SqueezeBertForNextSentencePrediction
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-.. autoclass:: transformers.SqueezeBertForNextSentencePrediction
     :members:
 
 

@@ -54,9 +54,6 @@ SQUEEZEBERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "squeezebert-mnli-headless",
 ]
 
-SqueezeBertForPreTraining = nn.Module
-SqueezeBertForNextSentencePrediction = nn.Module
-
 def transpose_x(x):
     return x.permute(0, 2, 1)  # [N, W, C] <--> {N, C, W]
 
