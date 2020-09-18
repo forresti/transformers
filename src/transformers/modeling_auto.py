@@ -421,6 +421,7 @@ MODEL_FOR_MULTIPLE_CHOICE_MAPPING = OrderedDict(
     ]
 )
 
+
 AUTO_MODEL_PRETRAINED_DOCSTRING = r"""
 
         The model class to instantiate is selected based on the :obj:`model_type` property of the config object
@@ -903,6 +904,7 @@ class AutoModelForMaskedLM:
     masked language modeling head---when created with the when created with the
     :meth:`~transformers.AutoModelForMaskedLM.from_pretrained` class method or the
     :meth:`~transformers.AutoModelForMasedLM.from_config` class method.
+
     This class cannot be instantiated directly using ``__init__()`` (throws an error).
     """
 
@@ -919,15 +921,20 @@ class AutoModelForMaskedLM:
         r"""
         Instantiates one of the model classes of the library---with a masked language modeling head---from a
         configuration.
+
         Note:
             Loading a model from its configuration file does **not** load the model weights.
             It only affects the model's configuration. Use :meth:`~transformers.AutoModelForMaskedLM.from_pretrained`
             to load the model weights.
+
         Args:
             config (:class:`~transformers.PretrainedConfig`):
                 The model class to instantiate is selected based on the configuration class:
+
                 List options
+
         Examples::
+
             >>> from transformers import AutoConfig, AutoModelForMaskedLM
             >>> # Download configuration from S3 and cache.
             >>> config = AutoConfig.from_pretrained('bert-base-uncased')
@@ -936,6 +943,47 @@ class AutoModelForMaskedLM:
         for config_class, model_class in MODEL_FOR_MASKED_LM_MAPPING.items():
             if isinstance(config, config_class):
                 return model_class(config)
+        raise ValueError(
+            "Unrecognized configuration class {} for this kind of AutoModel: {}.\n"
+            "Model type should be one of {}.".format(
+                config.__class__, cls.__name__, ", ".join(c.__name__ for c in MODEL_FOR_MASKED_LM_MAPPING.keys())
+            )
+        )
+
+    @classmethod
+    @replace_list_option_in_docstrings(MODEL_FOR_MASKED_LM_MAPPING)
+    @add_start_docstrings(
+        "Instantiate one of the model classes of the library---with a masked language modeling head---from a "
+        "pretrained model.",
+        AUTO_MODEL_PRETRAINED_DOCSTRING,
+    )
+    def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
+        r"""
+        Examples::
+
+            >>> from transformers import AutoConfig, AutoModelForMaskedLM
+
+            >>> # Download model and configuration from S3 and cache.
+            >>> model = AutoModelForMaskedLM.from_pretrained('bert-base-uncased')
+
+            >>> # Update configuration during loading
+            >>> model = AutoModelForMaskedLM.from_pretrained('bert-base-uncased', output_attentions=True)
+            >>> model.config.output_attentions
+            True
+
+            >>> # Loading from a TF checkpoint file instead of a PyTorch model (slower)
+            >>> config = AutoConfig.from_json_file('./tf_model/bert_tf_model_config.json')
+            >>> model = AutoModelForMaskedLM.from_pretrained('./tf_model/bert_tf_checkpoint.ckpt.index', from_tf=True, config=config)
+        """
+        config = kwargs.pop("config", None)
+        if not isinstance(config, PretrainedConfig):
+            config, kwargs = AutoConfig.from_pretrained(
+                pretrained_model_name_or_path, return_unused_kwargs=True, **kwargs
+            )
+
+        for config_class, model_class in MODEL_FOR_MASKED_LM_MAPPING.items():
+            if isinstance(config, config_class):
+                return model_class.from_pretrained(pretrained_model_name_or_path, *model_args, config=config, **kwargs)
         raise ValueError(
             "Unrecognized configuration class {} for this kind of AutoModel: {}.\n"
             "Model type should be one of {}.".format(
@@ -1074,8 +1122,8 @@ class AutoModelForSequenceClassification:
         Args:
             config (:class:`~transformers.PretrainedConfig`):
                 The model class to instantiate is selected based on the configuration class:
-        List options
 
+                List options
 
         Examples::
 
@@ -1106,7 +1154,6 @@ class AutoModelForSequenceClassification:
     def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
         r"""
         Examples::
-
 
             >>> from transformers import AutoConfig, AutoModelForSequenceClassification
 
@@ -1172,8 +1219,8 @@ class AutoModelForQuestionAnswering:
         Args:
             config (:class:`~transformers.PretrainedConfig`):
                 The model class to instantiate is selected based on the configuration class:
-        List options
 
+                List options
 
         Examples::
 
@@ -1246,6 +1293,7 @@ class AutoModelForTokenClassification:
     token classification head---when created with the when created with the
     :meth:`~transformers.AutoModelForTokenClassification.from_pretrained` class method or the
     :meth:`~transformers.AutoModelForTokenClassification.from_config` class method.
+
     This class cannot be instantiated directly using ``__init__()`` (throws an error).
     """
 
@@ -1261,15 +1309,20 @@ class AutoModelForTokenClassification:
     def from_config(cls, config):
         r"""
         Instantiates one of the model classes of the library---with a token classification head---from a configuration.
+
         Note:
             Loading a model from its configuration file does **not** load the model weights.
             It only affects the model's configuration. Use
             :meth:`~transformers.AutoModelForTokenClassification.from_pretrained` to load the model weights.
+
         Args:
             config (:class:`~transformers.PretrainedConfig`):
                 The model class to instantiate is selected based on the configuration class:
+
                 List options
+
         Examples::
+
             >>> from transformers import AutoConfig, AutoModelForTokenClassification
             >>> # Download configuration from S3 and cache.
             >>> config = AutoConfig.from_pretrained('bert-base-uncased')
@@ -1298,13 +1351,17 @@ class AutoModelForTokenClassification:
     def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
         r"""
         Examples::
+
             >>> from transformers import AutoConfig, AutoModelForTokenClassification
+
             >>> # Download model and configuration from S3 and cache.
             >>> model = AutoModelForTokenClassification.from_pretrained('bert-base-uncased')
+
             >>> # Update configuration during loading
             >>> model = AutoModelForTokenClassification.from_pretrained('bert-base-uncased', output_attentions=True)
             >>> model.config.output_attentions
             True
+
             >>> # Loading from a TF checkpoint file instead of a PyTorch model (slower)
             >>> config = AutoConfig.from_json_file('./tf_model/bert_tf_model_config.json')
             >>> model = AutoModelForTokenClassification.from_pretrained('./tf_model/bert_tf_checkpoint.ckpt.index', from_tf=True, config=config)
@@ -1327,7 +1384,6 @@ class AutoModelForTokenClassification:
                 ", ".join(c.__name__ for c in MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING.keys()),
             )
         )
-
 
 
 class AutoModelForMultipleChoice:
