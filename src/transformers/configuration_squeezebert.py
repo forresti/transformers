@@ -19,9 +19,9 @@ from .utils import logging
 logger = logging.get_logger(__name__)
 
 SQUEEZEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "squeezebert-uncased": "https://s3.amazonaws.com/models.huggingface.co/bert/squeezebert/squeezebert/squeezebert-uncased-config.json",
-    "squeezebert-mnli": "https://s3.amazonaws.com/models.huggingface.co/bert/squeezebert/squeezebert/squeezebert-uncased-config.json",
-    "squeezebert-mnli-headless": "https://s3.amazonaws.com/models.huggingface.co/bert/squeezebert/squeezebert/squeezebert-uncased-config.json",
+    "squeezebert-uncased": "https://s3.amazonaws.com/models.huggingface.co/bert/squeezebert/squeezebert-uncased/config.json",
+    "squeezebert-mnli": "https://s3.amazonaws.com/models.huggingface.co/bert/squeezebert/squeezebert-mnli/config.json",
+    "squeezebert-mnli-headless": "https://s3.amazonaws.com/models.huggingface.co/bert/squeezebert/squeezebert-mnli-headless/config.json",
 }
 
 
