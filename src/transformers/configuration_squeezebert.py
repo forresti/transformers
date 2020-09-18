@@ -148,4 +148,3 @@ class SqueezeBertConfig(PretrainedConfig):
         self.post_attention_groups = post_attention_groups
         self.intermediate_groups = intermediate_groups
         self.output_groups = output_groups
-

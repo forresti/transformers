@@ -51,7 +51,7 @@ python examples/text-classification/run_glue.py \
     --do_eval \
     --num_train_epochs 10 \
     --learning_rate 3e-05 \
-    --per_gpu_train_batch_size 16 \
+    --per_device_train_batch_size 16 \
     --save_steps 20000
 
 ```

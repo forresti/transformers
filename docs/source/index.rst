@@ -137,8 +137,8 @@ conversion utilities for the following models:
 27. `Bert For Sequence Generation <https://tfhub.dev/s?module-type=text-generation&subtype=module,placeholder>`_ (from Google) released with the paper
     `Leveraging Pre-trained Checkpoints for Sequence Generation Tasks
     <https://arxiv.org/abs/1907.12461>`_ by Sascha Rothe, Shashi Narayan, Aliaksei Severyn.
-28. `SqueezeBert`_ (from UC Berkeley) released with the paper
-    `SqueezeBERT: What can computer vision teach NLP about efficient neural networks? <https://arxiv.org/abs/2006.11316>`
+28. SqueezeBERT (from UC Berkeley) released with the paper
+    `SqueezeBERT: What can computer vision teach NLP about efficient neural networks? <https://arxiv.org/abs/2006.11316>`_
     by Forrest N. Iandola, Albert E. Shaw, Ravi Krishna, and Kurt W. Keutzer.
 29. `Other community models <https://huggingface.co/models>`_, contributed by the `community
     <https://huggingface.co/users>`_.

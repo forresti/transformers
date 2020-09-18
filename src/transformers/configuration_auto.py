@@ -110,7 +110,10 @@ CONFIG_MAPPING = OrderedDict(
         ("encoder-decoder", EncoderDecoderConfig),
         ("funnel", FunnelConfig),
         ("lxmert", LxmertConfig),
-        ("squeezebert", SqueezeBertConfig,),
+        (
+            "squeezebert",
+            SqueezeBertConfig,
+        ),
     ]
 )
 

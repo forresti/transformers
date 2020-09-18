@@ -15,7 +15,6 @@
 """ PyTorch SqueezeBert model. """
 
 
-
 import logging
 import math
 import os
@@ -54,10 +53,13 @@ SQUEEZEBERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "squeezebert-mnli-headless",
 ]
 
+
 def transpose_x(x):
     return x.permute(0, 2, 1)  # [N, W, C] <--> {N, C, W]
 
+
 ACT2FN = {"gelu": gelu, "relu": torch.nn.functional.relu}
+
 
 class SqueezeBertEmbeddings(nn.Module):
     """Construct the embeddings from word, position and token_type embeddings."""
@@ -102,16 +104,17 @@ class SqueezeBertEmbeddings(nn.Module):
 
 
 class MatMulWrapper(torch.nn.Module):
-    '''
+    """
     Wrapper for torch.matmul(). This makes flop-counting easier to implement.
     Note that if you directly call torch.matmul() in your code, the flop counter will typically
     ignore the flops of the matmul.
-    '''
+    """
+
     def __init__(self):
         super().__init__()
 
     def forward(self, mat1, mat2):
-        '''
+        """
 
         :param inputs: two torch tensors
         :return: matmul of these tensors
@@ -120,23 +123,24 @@ class MatMulWrapper(torch.nn.Module):
             mat1.shape: [B, <optional extra dims>, M, K]
             mat2.shape: [B, <optional extra dims>, K, N]
             output shape: [B, <optional extra dims>, M, N]
-        '''
+        """
         return torch.matmul(mat1, mat2)
 
 
-BertLayerNorm = nn.LayerNorm # This uses NWC data layout
+BertLayerNorm = nn.LayerNorm  # This uses NWC data layout
 
 
 class SqueezeBertLayerNorm(nn.LayerNorm):
-    '''
+    """
     This is a nn.LayerNorm subclass that accepts NCW data layout and performs normalization in the C dimension.
 
     N = batch
     C = channels
     W = sequence length
-    '''
+    """
+
     def __init__(self, hidden_size, eps=1e-12):
-        nn.LayerNorm.__init__(self, normalized_shape=hidden_size, eps=eps) # instantiates self.{weight, bias, eps}
+        nn.LayerNorm.__init__(self, normalized_shape=hidden_size, eps=eps)  # instantiates self.{weight, bias, eps}
 
     def forward(self, x):
         x = x.permute(0, 2, 1)
@@ -145,9 +149,10 @@ class SqueezeBertLayerNorm(nn.LayerNorm):
 
 
 class CDL(nn.Module):
-    '''
+    """
     CDL: Conv, Dropout, LayerNorm
-    '''
+    """
+
     def __init__(self, cin, cout, groups, dropout_prob):
         super().__init__()
 
@@ -164,9 +169,10 @@ class CDL(nn.Module):
 
 
 class CA(nn.Module):
-    '''
+    """
     CA: Conv, Activation
-    '''
+    """
+
     def __init__(self, cin, cout, groups, act):
         super().__init__()
         self.conv1d = nn.Conv1d(in_channels=cin, out_channels=cout, kernel_size=1, groups=groups)
@@ -176,24 +182,26 @@ class CA(nn.Module):
         output = self.conv1d(x)
         return self.act(output)
 
+
 class SqueezeBertSelfAttention(nn.Module):
     def __init__(self, config, cin, q_groups=1, k_groups=1, v_groups=1):
-        '''
+        """
         config = used for some things; ignored for others (work in progress...)
         cin = input channels = output channels
         groups = number of groups to use in conv1d layers
-        '''
+        """
         super().__init__()
         if cin % config.num_attention_heads != 0:
             raise ValueError(
                 "cin (%d) is not a multiple of the number of attention "
-                "heads (%d)" % (cin, config.num_attention_heads))
+                "heads (%d)" % (cin, config.num_attention_heads)
+            )
         self.num_attention_heads = config.num_attention_heads
         self.attention_head_size = int(cin / config.num_attention_heads)
         self.all_head_size = self.num_attention_heads * self.attention_head_size
 
         self.query = nn.Conv1d(in_channels=cin, out_channels=cin, kernel_size=1, groups=q_groups)
-        self.key   = nn.Conv1d(in_channels=cin, out_channels=cin, kernel_size=1, groups=k_groups)
+        self.key = nn.Conv1d(in_channels=cin, out_channels=cin, kernel_size=1, groups=k_groups)
         self.value = nn.Conv1d(in_channels=cin, out_channels=cin, kernel_size=1, groups=v_groups)
 
         self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
@@ -202,46 +210,43 @@ class SqueezeBertSelfAttention(nn.Module):
         self.matmul_qk = MatMulWrapper()
         self.matmul_qkv = MatMulWrapper()
 
-
     def transpose_for_scores(self, x):
-        '''
+        """
         input: [N, C, W]
         output: [N, C1, W, C2]
             where C1 is the head index, and C2 is one head's contents
-        '''
-        new_x_shape = (x.size()[0], self.num_attention_heads, self.attention_head_size, x.size()[-1]) # [N, C1, C2, W]
+        """
+        new_x_shape = (x.size()[0], self.num_attention_heads, self.attention_head_size, x.size()[-1])  # [N, C1, C2, W]
         x = x.view(*new_x_shape)
-        return x.permute(0, 1, 3, 2) # [N, C1, C2, W] --> [N, C1, W, C2]
-
+        return x.permute(0, 1, 3, 2)  # [N, C1, C2, W] --> [N, C1, W, C2]
 
     def transpose_key_for_scores(self, x):
-        '''
+        """
         input: [N, C, W]
         output: [N, C1, C2, W]
             where C1 is the head index, and C2 is one head's contents
-        '''
-        new_x_shape = (x.size()[0], self.num_attention_heads, self.attention_head_size, x.size()[-1]) # [N, C1, C2, W]
+        """
+        new_x_shape = (x.size()[0], self.num_attention_heads, self.attention_head_size, x.size()[-1])  # [N, C1, C2, W]
         x = x.view(*new_x_shape)
         # no `permute` needed
         return x
 
     def transpose_output(self, x):
-        '''
+        """
         input: [N, C1, W, C2]
         output: [N, C, W]
-        '''
-        x = x.permute(0, 1, 3, 2).contiguous() # [N, C1, C2, W]
-        new_x_shape = (x.size()[0], self.all_head_size, x.size()[3]) # [N, C, W]
+        """
+        x = x.permute(0, 1, 3, 2).contiguous()  # [N, C1, C2, W]
+        new_x_shape = (x.size()[0], self.all_head_size, x.size()[3])  # [N, C, W]
         x = x.view(*new_x_shape)
         return x
 
-
     def forward(self, hidden_states, attention_mask, output_attentions):
-        '''
+        """
         expects hidden_states in [N, C, W] data layout.
 
         The attention_mask data layout is [N, W], and it does not need to be transposed.
-        '''
+        """
         mixed_query_layer = self.query(hidden_states)
         mixed_key_layer = self.key(hidden_states)
         mixed_value_layer = self.value(hidden_states)
@@ -266,20 +271,20 @@ class SqueezeBertSelfAttention(nn.Module):
         context_layer = self.matmul_qkv(attention_probs, value_layer)
         context_layer = self.transpose_output(context_layer)
 
-        result = {'context_layer': context_layer}
+        result = {"context_layer": context_layer}
         if output_attentions:
-            result['attention_score'] = attention_score
+            result["attention_score"] = attention_score
         return result
 
 
 class SqueezeBertModule(nn.Module):
     def __init__(self, config):
-        '''
+        """
         hidden_size = input chans = output chans for Q, K, V (they are all the same ... for now) = output chans for the module
         intermediate_size = output chans for intermediate layer
         groups = number of groups for all layers in the BertModule. (eventually we could change the interface to allow
                  different groups for different layers)
-        '''
+        """
         super().__init__()
 
         c0 = config.hidden_size
@@ -287,23 +292,26 @@ class SqueezeBertModule(nn.Module):
         c2 = config.intermediate_size
         c3 = config.hidden_size
 
-        self.attention = SqueezeBertSelfAttention(config=config, cin=c0, q_groups=config.q_groups,
-                                                  k_groups=config.k_groups, v_groups=config.v_groups)
-        self.post_attention = CDL(cin=c0, cout=c1, groups=config.post_attention_groups, dropout_prob=config.hidden_dropout_prob)
+        self.attention = SqueezeBertSelfAttention(
+            config=config, cin=c0, q_groups=config.q_groups, k_groups=config.k_groups, v_groups=config.v_groups
+        )
+        self.post_attention = CDL(
+            cin=c0, cout=c1, groups=config.post_attention_groups, dropout_prob=config.hidden_dropout_prob
+        )
         self.intermediate = CA(cin=c1, cout=c2, groups=config.intermediate_groups, act=config.hidden_act)
         self.output = CDL(cin=c2, cout=c3, groups=config.output_groups, dropout_prob=config.hidden_dropout_prob)
 
     def forward(self, hidden_states, attention_mask, output_attentions):
         att = self.attention(hidden_states, attention_mask, output_attentions)
-        attention_output = att['context_layer']
+        attention_output = att["context_layer"]
 
         post_attention_output = self.post_attention(attention_output, hidden_states)
         intermediate_output = self.intermediate(post_attention_output)
         layer_output = self.output(intermediate_output, post_attention_output)
 
-        result = {'feature_map': layer_output}
+        result = {"feature_map": layer_output}
         if output_attentions:
-            result['attention_score'] = att['attention_score']
+            result["attention_score"] = att["attention_score"]
 
         return result
 
@@ -312,9 +320,11 @@ class SqueezeBertEncoder(nn.Module):
     def __init__(self, config):
         super().__init__()
 
-        assert config.embedding_size == config.hidden_size, "If you want embedding_size != intermediate hidden_size," \
-                                                            "please insert a Conv1d layer to adjust the number of channels " \
-                                                            "before the first SqueezeBertModule."
+        assert config.embedding_size == config.hidden_size, (
+            "If you want embedding_size != intermediate hidden_size,"
+            "please insert a Conv1d layer to adjust the number of channels "
+            "before the first SqueezeBertModule."
+        )
 
         layers = [SqueezeBertModule(config) for _ in range(config.num_hidden_layers)]
         self.layers = nn.ModuleList(*[layers])
@@ -338,12 +348,16 @@ class SqueezeBertEncoder(nn.Module):
         else:
             head_mask_is_all_none = False
 
-        assert head_mask_is_all_none==True, "head_mask is not yet supported in the SqueezeBert implementation."
-        assert encoder_hidden_states==None, "encoder_hidden_states is not yet supported in the SqueezeBert implementation."
-        assert encoder_attention_mask==None, "encoder_attention_mask is not yet supported in the SqueezeBert implementation." \
-                                            "However, note that attention_mask is supported."
+        assert head_mask_is_all_none == True, "head_mask is not yet supported in the SqueezeBert implementation."
+        assert (
+            encoder_hidden_states == None
+        ), "encoder_hidden_states is not yet supported in the SqueezeBert implementation."
+        assert encoder_attention_mask == None, (
+            "encoder_attention_mask is not yet supported in the SqueezeBert implementation."
+            "However, note that attention_mask is supported."
+        )
 
-        hidden_states = transpose_x(hidden_states) # [N, W, C] --> [N, C, W]
+        hidden_states = transpose_x(hidden_states)  # [N, W, C] --> [N, C, W]
 
         all_hidden_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
@@ -352,12 +366,12 @@ class SqueezeBertEncoder(nn.Module):
             layer_output = layer.forward(hidden_states, attention_mask, output_attentions)
 
             if output_attentions:
-                all_attentions + (layer_output['attention_score'],)
+                all_attentions + (layer_output["attention_score"],)
             if output_hidden_states:
-                all_hidden_states + (layer_output['feature_map'],)
-            hidden_states = layer_output['feature_map']
+                all_hidden_states + (layer_output["feature_map"],)
+            hidden_states = layer_output["feature_map"]
 
-        hidden_states = transpose_x(hidden_states) # [N, C, W] --> [N, W, C]
+        hidden_states = transpose_x(hidden_states)  # [N, C, W] --> [N, W, C]
 
         """
             In the following, the data layouts are...
@@ -373,6 +387,7 @@ class SqueezeBertEncoder(nn.Module):
         return BaseModelOutput(
             last_hidden_state=hidden_states, hidden_states=all_hidden_states, attentions=all_attentions
         )
+
 
 class SqueezeBertPooler(nn.Module):
     def __init__(self, config):
@@ -757,7 +772,9 @@ class SqueezeBertForMultipleChoice(SqueezeBertPreTrainedModel):
 
         self.init_weights()
 
-    @add_start_docstrings_to_callable(SQUEEZEBERT_INPUTS_DOCSTRING.format("(batch_size, num_choices, sequence_length)"))
+    @add_start_docstrings_to_callable(
+        SQUEEZEBERT_INPUTS_DOCSTRING.format("(batch_size, num_choices, sequence_length)")
+    )
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="squeezebert-mnli-headless",
