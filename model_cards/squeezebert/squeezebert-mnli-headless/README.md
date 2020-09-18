@@ -22,13 +22,11 @@ The authors found that SqueezeBERT is 4.3x faster than `bert-base-uncased` on a 
 The model is pretrained using the Masked Language Model (MLM) and Sentence Order Prediction (SOP) tasks. (Author's note: If you decide to pretrain your own model, and you prefer to use Next Sentence Prediction (NSP) instead of SOP, that should work too.)
 
 From the SqueezeBERT paper:
-```
-We pretrain SqueezeBERT from scratch (without distillation) using the [LAMB](https://arxiv.org/abs/1904.00962) optimizer, and we employ the hyperparameters recommended by the LAMB authors: a global batch size of 8192, a learning rate of 2.5e-3, and a warmup proportion of 0.28. Following the LAMB paper's recommendations, we pretrain for 56k steps with a maximum sequence length of 128 and then for 6k steps with a maximum sequence length of 512.
-```
+> We pretrain SqueezeBERT from scratch (without distillation) using the [LAMB](https://arxiv.org/abs/1904.00962) optimizer, and we employ the hyperparameters recommended by the LAMB authors: a global batch size of 8192, a learning rate of 2.5e-3, and a warmup proportion of 0.28. Following the LAMB paper's recommendations, we pretrain for 56k steps with a maximum sequence length of 128 and then for 6k steps with a maximum sequence length of 512.
 
 ## Finetuning
 
-The SqueezeBERT paper results from 2 approaches to finetuning the model:
+The SqueezeBERT paper presents 2 approaches to finetuning the model:
 - "finetuning without bells and whistles" -- after pretraining the SqueezeBERT model, finetune it on each GLUE task
 - "finetuning with bells and whistles" -- after pretraining the SqueezeBERT model, finetune it on a MNLI with distillation from a teacher model. Then, use the MNLI-finetuned SqueezeBERT model as a student model to finetune on each of the other GLUE tasks (e.g. RTE, MRPC, …) with distillation from a task-specific teacher model.
 
@@ -37,6 +35,7 @@ Note that finetuning SqueezeBERT with distillation is not yet implemented in thi
 
 This model, `squeezebert-mnli-headless`, is the "finetuned with bells and whistles" MNLI-finetuned SqueezeBERT model. In this particular model, we have removed the final classification layer -- in other words, it is "headless." We recommend using this model if you intend to finetune the model on your own data. Using this model means that your final layer will automatically be reinitialized when you start finetuning on your data.
 
+### How to finetune
 To try finetuning SqueezeBERT on the [MRPC](https://www.microsoft.com/en-us/download/details.aspx?id=52398) text classification task, you can run the following command:
 ```
 ./utils/download_glue_data.py
@@ -57,11 +56,11 @@ python examples/text-classification/run_glue.py \
 ```
 
 ## BibTeX entry and citation info
-
+```
 @article{2020_SqueezeBERT,
      author = {Forrest N. Iandola and Albert E. Shaw and Ravi Krishna and Kurt W. Keutzer},
      title = {{SqueezeBERT}: What can computer vision teach NLP about efficient neural networks?},
      journal = {arXiv:2006.11316},
      year = {2020}
 }
-
+```
