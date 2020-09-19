@@ -215,6 +215,7 @@ MODEL_MAPPING = OrderedDict(
         (BartConfig, BartModel),
         (LongformerConfig, LongformerModel),
         (RobertaConfig, RobertaModel),
+        (SqueezeBertConfig, SqueezeBertModel),
         (BertConfig, BertModel),
         (OpenAIGPTConfig, OpenAIGPTModel),
         (GPT2Config, GPT2Model),
@@ -230,7 +231,6 @@ MODEL_MAPPING = OrderedDict(
         (FunnelConfig, FunnelModel),
         (LxmertConfig, LxmertModel),
         (BertGenerationConfig, BertGenerationEncoder),
-        (SqueezeBertConfig, SqueezeBertModel),
     ]
 )
 
@@ -246,6 +246,7 @@ MODEL_FOR_PRETRAINING_MAPPING = OrderedDict(
         (FSMTConfig, FSMTForConditionalGeneration),
         (LongformerConfig, LongformerForMaskedLM),
         (RobertaConfig, RobertaForMaskedLM),
+        (SqueezeBertConfig, SqueezeBertForMaskedLM),
         (BertConfig, BertForPreTraining),
         (OpenAIGPTConfig, OpenAIGPTLMHeadModel),
         (GPT2Config, GPT2LMHeadModel),
@@ -257,7 +258,6 @@ MODEL_FOR_PRETRAINING_MAPPING = OrderedDict(
         (CTRLConfig, CTRLLMHeadModel),
         (ElectraConfig, ElectraForPreTraining),
         (LxmertConfig, LxmertForPreTraining),
-        (SqueezeBertConfig, SqueezeBertForMaskedLM),
     ]
 )
 
@@ -272,6 +272,7 @@ MODEL_WITH_LM_HEAD_MAPPING = OrderedDict(
         (BartConfig, BartForConditionalGeneration),
         (LongformerConfig, LongformerForMaskedLM),
         (RobertaConfig, RobertaForMaskedLM),
+        (SqueezeBertConfig, SqueezeBertForMaskedLM),
         (BertConfig, BertForMaskedLM),
         (OpenAIGPTConfig, OpenAIGPTLMHeadModel),
         (GPT2Config, GPT2LMHeadModel),
@@ -285,7 +286,6 @@ MODEL_WITH_LM_HEAD_MAPPING = OrderedDict(
         (EncoderDecoderConfig, EncoderDecoderModel),
         (ReformerConfig, ReformerModelWithLMHead),
         (FunnelConfig, FunnelForMaskedLM),
-        (SqueezeBertConfig, SqueezeBertForMaskedLM),
     ]
 )
 
@@ -318,6 +318,7 @@ MODEL_FOR_MASKED_LM_MAPPING = OrderedDict(
         (XLMRobertaConfig, XLMRobertaForMaskedLM),
         (LongformerConfig, LongformerForMaskedLM),
         (RobertaConfig, RobertaForMaskedLM),
+        (SqueezeBertConfig, SqueezeBertForMaskedLM),
         (BertConfig, BertForMaskedLM),
         (MobileBertConfig, MobileBertForMaskedLM),
         (FlaubertConfig, FlaubertWithLMHeadModel),
@@ -325,7 +326,6 @@ MODEL_FOR_MASKED_LM_MAPPING = OrderedDict(
         (ElectraConfig, ElectraForMaskedLM),
         (ReformerConfig, ReformerForMaskedLM),
         (FunnelConfig, FunnelForMaskedLM),
-        (SqueezeBertConfig, SqueezeBertForMaskedLM),
     ]
 )
 
@@ -350,6 +350,7 @@ MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING = OrderedDict(
         (BartConfig, BartForSequenceClassification),
         (LongformerConfig, LongformerForSequenceClassification),
         (RobertaConfig, RobertaForSequenceClassification),
+        (SqueezeBertConfig, SqueezeBertForSequenceClassification),
         (BertConfig, BertForSequenceClassification),
         (XLNetConfig, XLNetForSequenceClassification),
         (MobileBertConfig, MobileBertForSequenceClassification),
@@ -357,7 +358,6 @@ MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING = OrderedDict(
         (XLMConfig, XLMForSequenceClassification),
         (ElectraConfig, ElectraForSequenceClassification),
         (FunnelConfig, FunnelForSequenceClassification),
-        (SqueezeBertConfig, SqueezeBertForSequenceClassification),
     ]
 )
 
@@ -370,6 +370,7 @@ MODEL_FOR_QUESTION_ANSWERING_MAPPING = OrderedDict(
         (LongformerConfig, LongformerForQuestionAnswering),
         (XLMRobertaConfig, XLMRobertaForQuestionAnswering),
         (RobertaConfig, RobertaForQuestionAnswering),
+        (SqueezeBertConfig, SqueezeBertForQuestionAnswering),
         (BertConfig, BertForQuestionAnswering),
         (XLNetConfig, XLNetForQuestionAnsweringSimple),
         (FlaubertConfig, FlaubertForQuestionAnsweringSimple),
@@ -378,7 +379,6 @@ MODEL_FOR_QUESTION_ANSWERING_MAPPING = OrderedDict(
         (ElectraConfig, ElectraForQuestionAnswering),
         (ReformerConfig, ReformerForQuestionAnswering),
         (FunnelConfig, FunnelForQuestionAnswering),
-        (SqueezeBertConfig, SqueezeBertForQuestionAnswering),
     ]
 )
 
@@ -391,6 +391,7 @@ MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING = OrderedDict(
         (XLMRobertaConfig, XLMRobertaForTokenClassification),
         (LongformerConfig, LongformerForTokenClassification),
         (RobertaConfig, RobertaForTokenClassification),
+        (SqueezeBertConfig, SqueezeBertForTokenClassification),
         (BertConfig, BertForTokenClassification),
         (MobileBertConfig, MobileBertForTokenClassification),
         (XLNetConfig, XLNetForTokenClassification),
@@ -398,7 +399,6 @@ MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING = OrderedDict(
         (ElectraConfig, ElectraForTokenClassification),
         (FlaubertConfig, FlaubertForTokenClassification),
         (FunnelConfig, FunnelForTokenClassification),
-        (SqueezeBertConfig, SqueezeBertForTokenClassification),
     ]
 )
 
@@ -409,6 +409,7 @@ MODEL_FOR_MULTIPLE_CHOICE_MAPPING = OrderedDict(
         (XLMRobertaConfig, XLMRobertaForMultipleChoice),
         (LongformerConfig, LongformerForMultipleChoice),
         (RobertaConfig, RobertaForMultipleChoice),
+        (SqueezeBertConfig, SqueezeBertForMultipleChoice),
         (BertConfig, BertForMultipleChoice),
         (DistilBertConfig, DistilBertForMultipleChoice),
         (MobileBertConfig, MobileBertForMultipleChoice),
@@ -417,7 +418,6 @@ MODEL_FOR_MULTIPLE_CHOICE_MAPPING = OrderedDict(
         (XLMConfig, XLMForMultipleChoice),
         (FlaubertConfig, FlaubertForMultipleChoice),
         (FunnelConfig, FunnelForMultipleChoice),
-        (SqueezeBertConfig, SqueezeBertForMultipleChoice),
     ]
 )
 
