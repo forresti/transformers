@@ -409,7 +409,7 @@ class SqueezeBertPreTrainedModel(PreTrainedModel):
     """
 
     config_class = SqueezeBertConfig
-    base_model_prefix = "squeezebert"
+    base_model_prefix = "transformer"
     authorized_missing_keys = [r"position_ids"]
 
     def _init_weights(self, module):
@@ -534,7 +534,7 @@ class SqueezeBertModel(SqueezeBertPreTrainedModel):
     @add_start_docstrings_to_callable(SQUEEZEBERT_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="squeezebert-mnli-head'less",
+        checkpoint="squeezebert-mnli-headless",
         output_type=BaseModelOutputWithPooling,
         config_class=_CONFIG_FOR_DOC,
     )
