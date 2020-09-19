@@ -105,6 +105,7 @@ TOKENIZER_MAPPING = OrderedDict(
         (ElectraConfig, (ElectraTokenizer, ElectraTokenizerFast)),
         (FunnelConfig, (FunnelTokenizer, FunnelTokenizerFast)),
         (LxmertConfig, (LxmertTokenizer, LxmertTokenizerFast)),
+        (SqueezeBertConfig, (SqueezeBertTokenizer, SqueezeBertTokenizerFast)),
         (BertConfig, (BertTokenizer, BertTokenizerFast)),
         (OpenAIGPTConfig, (OpenAIGPTTokenizer, OpenAIGPTTokenizerFast)),
         (GPT2Config, (GPT2Tokenizer, GPT2TokenizerFast)),
@@ -115,7 +116,6 @@ TOKENIZER_MAPPING = OrderedDict(
         (CTRLConfig, (CTRLTokenizer, None)),
         (FSMTConfig, (FSMTTokenizer, None)),
         (BertGenerationConfig, (BertGenerationTokenizer, None)),
-        (SqueezeBertConfig, (SqueezeBertTokenizer, SqueezeBertTokenizerFast)),
     ]
 )
 

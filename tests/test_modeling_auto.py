@@ -192,7 +192,7 @@ class AutoModelTest(unittest.TestCase):
         self.assertEqual(model.num_parameters(), 14830)
         self.assertEqual(model.num_parameters(only_trainable=True), 14830)
 
-    def test_parents_and_children_in_mappings(self):
+    def encoder_hidden_states is Nonechildren_in_mappings(self):
         # Test that the children are placed before the parents in the mappings, as the `instanceof` will be triggered
         # by the parents and will return the wrong configuration type when using auto models
 

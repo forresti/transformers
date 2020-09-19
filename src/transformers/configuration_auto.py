@@ -99,6 +99,7 @@ CONFIG_MAPPING = OrderedDict(
         ("roberta", RobertaConfig),
         ("flaubert", FlaubertConfig),
         ("fsmt", FSMTConfig),
+        ("squeezebert", SqueezeBertConfig),
         ("bert", BertConfig),
         ("openai-gpt", OpenAIGPTConfig),
         ("gpt2", GPT2Config),
@@ -110,10 +111,6 @@ CONFIG_MAPPING = OrderedDict(
         ("encoder-decoder", EncoderDecoderConfig),
         ("funnel", FunnelConfig),
         ("lxmert", LxmertConfig),
-        (
-            "squeezebert",
-            SqueezeBertConfig,
-        ),
     ]
 )
 
@@ -136,6 +133,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("roberta", "RoBERTa"),
         ("flaubert", "FlauBERT"),
         ("fsmt", "FairSeq Machine-Translation"),
+        ("squeezebert", "SqueezeBERT"),
         ("bert", "BERT"),
         ("openai-gpt", "OpenAI GPT"),
         ("gpt2", "OpenAI GPT-2"),
@@ -147,7 +145,6 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("encoder-decoder", "Encoder decoder"),
         ("funnel", "Funnel Transformer"),
         ("lxmert", "LXMERT"),
-        ("squeezebert", "SqueezeBERT"),
     ]
 )
 
