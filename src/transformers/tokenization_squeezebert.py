@@ -29,10 +29,18 @@ PRETRAINED_VOCAB_FILES_MAP = {
     }
 }
 
-PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {}
+PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
+    "squeezebert-uncased": 512,
+    "squeezebert-mnli": 512,
+    "squeezebert-mnli-headless": 512,
+}
 
 
-PRETRAINED_INIT_CONFIGURATION = {}
+PRETRAINED_INIT_CONFIGURATION = {
+    "squeezebert-uncased": {"do_lower_case": True},
+    "squeezebert-mnli": {"do_lower_case": True},
+    "squeezebert-mnli-headless": {"do_lower_case": True},
+}
 
 
 class SqueezeBertTokenizer(BertTokenizer):
