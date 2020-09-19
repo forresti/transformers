@@ -60,13 +60,6 @@ SqueezeBertTokenizerFast
     :members:
 
 
-SqueezeBert specific outputs
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-.. autoclass::
-    :members:
-
-
 SqueezeBertModel
 ~~~~~~~~~~~~~~~~~~~~
 
