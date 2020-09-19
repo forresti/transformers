@@ -39,14 +39,14 @@ Tips:
   `squeezebert-mnli-headless` checkpoint.
 
 SqueezeBertConfig
-~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.SqueezeBertConfig
     :members:
 
 
 SqueezeBertTokenizer
-~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.SqueezeBertTokenizer
     :members: build_inputs_with_special_tokens, get_special_tokens_mask,
@@ -54,14 +54,14 @@ SqueezeBertTokenizer
 
 
 SqueezeBertTokenizerFast
-~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.SqueezeBertTokenizerFast
     :members:
 
 
 SqueezeBert specific outputs
-~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass::
     :members:
