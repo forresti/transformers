@@ -89,12 +89,12 @@ if is_torch_available():
             self.num_labels = num_labels
             self.num_choices = num_choices
             self.scope = scope
-            self.q_groups=q_groups
-            self.k_groups=k_groups
-            self.v_groups=v_groups
-            self.post_attention_groups=post_attention_groups
-            self.intermediate_groups=intermediate_groups
-            self.output_groups=output_groups
+            self.q_groups = q_groups
+            self.k_groups = k_groups
+            self.v_groups = v_groups
+            self.post_attention_groups = post_attention_groups
+            self.intermediate_groups = intermediate_groups
+            self.output_groups = output_groups
 
         def prepare_config_and_inputs(self):
             input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
