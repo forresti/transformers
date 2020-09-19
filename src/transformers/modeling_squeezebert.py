@@ -65,9 +65,9 @@ class SqueezeBertEmbeddings(nn.Module):
 
     def __init__(self, config):
         super().__init__()
-        self.word_embeddings = nn.Embedding(config.vocab_size, config.hidden_size, padding_idx=config.pad_token_id)
-        self.position_embeddings = nn.Embedding(config.max_position_embeddings, config.hidden_size)
-        self.token_type_embeddings = nn.Embedding(config.type_vocab_size, config.hidden_size)
+        self.word_embeddings = nn.Embedding(config.vocab_size, config.embedding_size, padding_idx=config.pad_token_id)
+        self.position_embeddings = nn.Embedding(config.max_position_embeddings, config.embedding_size)
+        self.token_type_embeddings = nn.Embedding(config.type_vocab_size, config.embedding_size)
 
         # self.LayerNorm is not snake-cased to stick with TensorFlow model variable name and be able to load
         # any TensorFlow checkpoint file
@@ -365,9 +365,9 @@ class SqueezeBertEncoder(nn.Module):
             layer_output = layer.forward(hidden_states, attention_mask, output_attentions)
 
             if output_attentions:
-                all_attentions + (layer_output["attention_score"],)
+                all_attentions += (layer_output["attention_score"],)
             if output_hidden_states:
-                all_hidden_states + (layer_output["feature_map"],)
+                all_hidden_states += (layer_output["feature_map"],)
             hidden_states = layer_output["feature_map"]
 
         hidden_states = transpose_x(hidden_states)  # [N, C, W] --> [N, W, C]
@@ -414,18 +414,18 @@ class SqueezeBertPreTrainedModel(PreTrainedModel):
 
     def _init_weights(self, module):
         """ Initialize the weights """
-        if isinstance(module, (nn.Linear, nn.Embedding)):
+        if isinstance(module, (nn.Linear, nn.Conv1d, nn.Embedding)):
             # Slightly different from the TF version which uses truncated_normal for initialization
             # cf https://github.com/pytorch/pytorch/pull/5617
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
         elif isinstance(module, SqueezeBertLayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
-        if isinstance(module, nn.Linear) and module.bias is not None:
+        if isinstance(module, (nn.Linear, nn.Conv1d)) and module.bias is not None:
             module.bias.data.zero_()
 
 
-SQUEEZEBERT_START_DOCSTRING = r"""    The SqueezeBert model was proposed in
+SQUEEZEBERT_START_DOCSTRING = r"""    The SqueezeBERT model was proposed in
     `SqueezeBERT: What can computer vision teach NLP about efficient neural networks?
     <https://arxiv.org/abs/2006.11316>`__ by Forrest N. Iandola, Albert E. Shaw, Ravi Krishna, and Kurt W. Keutzer
 
@@ -504,7 +504,7 @@ SQUEEZEBERT_INPUTS_DOCSTRING = r"""
 
 
 @add_start_docstrings(
-    "The bare SQUEEZEBERT Model transformer outputting raw hidden-states without any specific head on top.",
+    "The bare SqueezeBERT Model transformer outputting raw hidden-states without any specific head on top.",
     SQUEEZEBERT_START_DOCSTRING,
 )
 class SqueezeBertModel(SqueezeBertPreTrainedModel):
@@ -583,7 +583,14 @@ class SqueezeBertModel(SqueezeBertPreTrainedModel):
         embedding_output = self.embeddings(
             input_ids=input_ids, position_ids=position_ids, token_type_ids=token_type_ids, inputs_embeds=inputs_embeds
         )
-        encoder_outputs = self.encoder(embedding_output, extended_attention_mask, head_mask=head_mask)
+        encoder_outputs = self.encoder(
+            hidden_states=embedding_output,
+            attention_mask=extended_attention_mask,
+            head_mask=head_mask,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
         sequence_output = encoder_outputs[0]
         pooled_output = self.pooler(sequence_output)
 
@@ -598,13 +605,13 @@ class SqueezeBertModel(SqueezeBertPreTrainedModel):
         )
 
 
-@add_start_docstrings("""SqueezeBert Model with a `language modeling` head on top. """, SQUEEZEBERT_START_DOCSTRING)
+@add_start_docstrings("""SqueezeBERT Model with a `language modeling` head on top. """, SQUEEZEBERT_START_DOCSTRING)
 class SqueezeBertForMaskedLM(SqueezeBertPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
         self.transformer = SqueezeBertModel(config)
-        self.lm_head = nn.Linear(config.n_embd, config.vocab_size)
+        self.lm_head = nn.Linear(config.embedding_size, config.vocab_size)
 
         self.init_weights()
 
@@ -673,7 +680,7 @@ class SqueezeBertForMaskedLM(SqueezeBertPreTrainedModel):
 
 
 @add_start_docstrings(
-    """SQUEEZEBERT Model transformer with a sequence classification/regression head on top (a linear layer on top of
+    """SqueezeBERT Model transformer with a sequence classification/regression head on top (a linear layer on top of
     the pooled output) e.g. for GLUE tasks. """,
     SQUEEZEBERT_START_DOCSTRING,
 )
@@ -757,7 +764,7 @@ class SqueezeBertForSequenceClassification(SqueezeBertPreTrainedModel):
 
 
 @add_start_docstrings(
-    """SQUEEZEBERT Model with a multiple choice classification head on top (a linear layer on top of
+    """SqueezeBERT Model with a multiple choice classification head on top (a linear layer on top of
     the pooled output and a softmax) e.g. for RocStories/SWAG tasks. """,
     SQUEEZEBERT_START_DOCSTRING,
 )
@@ -848,7 +855,7 @@ class SqueezeBertForMultipleChoice(SqueezeBertPreTrainedModel):
 
 
 @add_start_docstrings(
-    """SQUEEZEBERT Model with a token classification head on top (a linear layer on top of
+    """SqueezeBERT Model with a token classification head on top (a linear layer on top of
     the hidden-states output) e.g. for Named-Entity-Recognition (NER) tasks. """,
     SQUEEZEBERT_START_DOCSTRING,
 )
@@ -934,7 +941,7 @@ class SqueezeBertForTokenClassification(SqueezeBertPreTrainedModel):
 
 
 @add_start_docstrings(
-    """SQUEEZEBERT Model with a span classification head on top for extractive question-answering tasks like SQuAD (a linear
+    """SqueezeBERT Model with a span classification head on top for extractive question-answering tasks like SQuAD (a linear
     layers on top of the hidden-states output to compute `span start logits` and `span end logits`). """,
     SQUEEZEBERT_START_DOCSTRING,
 )

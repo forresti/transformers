@@ -49,7 +49,7 @@ if is_torch_available():
             hidden_size=32,
             num_hidden_layers=5,
             num_attention_heads=4,
-            intermediate_size=37,
+            intermediate_size=64,
             hidden_act="gelu",
             hidden_dropout_prob=0.1,
             attention_probs_dropout_prob=0.1,
@@ -60,6 +60,12 @@ if is_torch_available():
             num_labels=3,
             num_choices=4,
             scope=None,
+            q_groups=2,
+            k_groups=2,
+            v_groups=2,
+            post_attention_groups=2,
+            intermediate_groups=4,
+            output_groups=1,
         ):
             self.parent = parent
             self.batch_size = batch_size
@@ -83,6 +89,12 @@ if is_torch_available():
             self.num_labels = num_labels
             self.num_choices = num_choices
             self.scope = scope
+            self.q_groups=q_groups
+            self.k_groups=k_groups
+            self.v_groups=v_groups
+            self.post_attention_groups=post_attention_groups
+            self.intermediate_groups=intermediate_groups
+            self.output_groups=output_groups
 
         def prepare_config_and_inputs(self):
             input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
@@ -100,16 +112,23 @@ if is_torch_available():
                 choice_labels = ids_tensor([self.batch_size], self.num_choices)
 
             config = SqueezeBertConfig(
+                embedding_size=self.hidden_size,
                 vocab_size=self.vocab_size,
-                dim=self.hidden_size,
-                n_layers=self.num_hidden_layers,
-                n_heads=self.num_attention_heads,
-                hidden_dim=self.intermediate_size,
+                hidden_size=self.hidden_size,
+                num_hidden_layers=self.num_hidden_layers,
+                num_attention_heads=self.num_attention_heads,
+                intermediate_size=self.intermediate_size,
                 hidden_act=self.hidden_act,
-                dropout=self.hidden_dropout_prob,
+                attention_probs_dropout_prob=self.hidden_dropout_prob,
                 attention_dropout=self.attention_probs_dropout_prob,
                 max_position_embeddings=self.max_position_embeddings,
                 initializer_range=self.initializer_range,
+                q_groups=self.q_groups,
+                k_groups=self.k_groups,
+                v_groups=self.v_groups,
+                post_attention_groups=self.post_attention_groups,
+                intermediate_groups=self.intermediate_groups,
+                output_groups=self.output_groups,
                 return_dict=True,
             )
 
@@ -207,7 +226,7 @@ class SqueezeBertModelTest(ModelTesterMixin, unittest.TestCase):
         if is_torch_available()
         else None
     )
-    test_pruning = True
+    test_pruning = False
     test_torchscript = True
     test_resize_embeddings = True
     test_head_masking = False
