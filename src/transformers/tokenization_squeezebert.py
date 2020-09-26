@@ -24,23 +24,23 @@ VOCAB_FILES_NAMES = {"vocab_file": "vocab.txt"}
 
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
-        "squeezebert-uncased": "https://s3.amazonaws.com/models.huggingface.co/bert/squeezebert/squeezebert-uncased/vocab.txt",
-        "squeezebert-mnli": "https://s3.amazonaws.com/models.huggingface.co/bert/squeezebert/squeezebert-mnli/vocab.txt",
-        "squeezebert-mnli-headless": "https://s3.amazonaws.com/models.huggingface.co/bert/squeezebert/squeezebert-mnli-headless/vocab.txt",
+        "squeezebert/squeezebert-uncased": "https://s3.amazonaws.com/models.huggingface.co/bert/squeezebert/squeezebert-uncased/vocab.txt",
+        "squeezebert/squeezebert-mnli": "https://s3.amazonaws.com/models.huggingface.co/bert/squeezebert/squeezebert-mnli/vocab.txt",
+        "squeezebert/squeezebert-mnli-headless": "https://s3.amazonaws.com/models.huggingface.co/bert/squeezebert/squeezebert-mnli-headless/vocab.txt",
     }
 }
 
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "squeezebert-uncased": 512,
-    "squeezebert-mnli": 512,
-    "squeezebert-mnli-headless": 512,
+    "squeezebert/squeezebert-uncased": 512,
+    "squeezebert/squeezebert-mnli": 512,
+    "squeezebert/squeezebert-mnli-headless": 512,
 }
 
 
 PRETRAINED_INIT_CONFIGURATION = {
-    "squeezebert-uncased": {"do_lower_case": True},
-    "squeezebert-mnli": {"do_lower_case": True},
-    "squeezebert-mnli-headless": {"do_lower_case": True},
+    "squeezebert/squeezebert-uncased": {"do_lower_case": True},
+    "squeezebert/squeezebert-mnli": {"do_lower_case": True},
+    "squeezebert/squeezebert-mnli-headless": {"do_lower_case": True},
 }
 
 

@@ -29,7 +29,7 @@ class SqueezeBertTokenizationTest(BertTokenizationTest):
 
     @slow
     def test_sequence_builders(self):
-        tokenizer = SqueezeBertTokenizer.from_pretrained("squeezebert-mnli-headless")
+        tokenizer = SqueezeBertTokenizer.from_pretrained("squeezebert/squeezebert-mnli-headless")
 
         text = tokenizer.encode("sequence builders", add_special_tokens=False)
         text_2 = tokenizer.encode("multi-sequence build", add_special_tokens=False)

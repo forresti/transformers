@@ -47,9 +47,9 @@ _TOKENIZER_FOR_DOC = "SqueezeBertTokenizer"
 # the pretrained weights provided with the models
 ####################################################
 SQUEEZEBERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "squeezebert-uncased",
-    "squeezebert-mnli",
-    "squeezebert-mnli-headless",
+    "squeezebert/squeezebert-uncased",
+    "squeezebert/squeezebert-mnli",
+    "squeezebert/squeezebert-mnli-headless",
 ]
 
 
@@ -424,7 +424,7 @@ SQUEEZEBERT_START_DOCSTRING = r"""    The SqueezeBERT model was proposed in
     usage and behavior.
 
     For best results finetuning SqueezeBERT on text classification tasks, it is recommended to use the
-    `squeezebert-mnli-headless` checkpoint as a starting point.
+    `squeezebert/squeezebert-mnli-headless` checkpoint as a starting point.
 
     Parameters:
         config (:class:`~transformers.SqueezeBertConfig`): Model configuration class with all the parameters of the model.
@@ -529,7 +529,7 @@ class SqueezeBertModel(SqueezeBertPreTrainedModel):
     @add_start_docstrings_to_callable(SQUEEZEBERT_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="squeezebert-mnli-headless",
+        checkpoint="squeezebert/squeezebert-mnli-headless",
         output_type=BaseModelOutputWithPooling,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -616,7 +616,7 @@ class SqueezeBertForMaskedLM(SqueezeBertPreTrainedModel):
     @add_start_docstrings_to_callable(SQUEEZEBERT_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="squeezebert-mnli-headless",
+        checkpoint="squeezebert/squeezebert-uncased",
         output_type=MaskedLMOutput,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -693,7 +693,7 @@ class SqueezeBertForSequenceClassification(SqueezeBertPreTrainedModel):
     @add_start_docstrings_to_callable(SQUEEZEBERT_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="squeezebert-mnli-headless",
+        checkpoint="squeezebert/squeezebert-mnli-headless",
         output_type=SequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -778,7 +778,7 @@ class SqueezeBertForMultipleChoice(SqueezeBertPreTrainedModel):
     )
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="squeezebert-mnli-headless",
+        checkpoint="squeezebert/squeezebert-mnli-headless",
         output_type=MultipleChoiceModelOutput,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -868,7 +868,7 @@ class SqueezeBertForTokenClassification(SqueezeBertPreTrainedModel):
     @add_start_docstrings_to_callable(SQUEEZEBERT_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="squeezebert-mnli-headless",
+        checkpoint="squeezebert/squeezebert-mnli-headless",
         output_type=TokenClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -953,7 +953,7 @@ class SqueezeBertForQuestionAnswering(SqueezeBertPreTrainedModel):
     @add_start_docstrings_to_callable(SQUEEZEBERT_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="squeezebert-mnli-headless",
+        checkpoint="squeezebert/squeezebert-mnli-headless",
         output_type=QuestionAnsweringModelOutput,
         config_class=_CONFIG_FOR_DOC,
     )

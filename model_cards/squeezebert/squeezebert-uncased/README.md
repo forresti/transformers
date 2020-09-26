@@ -34,7 +34,7 @@ The SqueezeBERT paper results from 2 approaches to finetuning the model:
 A detailed discussion of the hyperparameters used for finetuning is provided in the appendix of the [SqueezeBERT paper](https://arxiv.org/abs/2006.11316).
 Note that finetuning SqueezeBERT with distillation is not yet implemented in this repo. If the author (Forrest Iandola - forrest.dnn@gmail.com) gets enough encouragement from the user community, he will add example code to Transformers for finetuning SqueezeBERT with distillation.
 
-This model, `squeezebert-uncased`, has been pretrained but not finetuned. For most text classification tasks, we recommend using squeezebert-mnli-headless as a starting point.
+This model, `squeezebert/squeezebert-uncased`, has been pretrained but not finetuned. For most text classification tasks, we recommend using squeezebert-mnli-headless as a starting point.
 
 ### How to finetune
 To try finetuning SqueezeBERT on the [MRPC](https://www.microsoft.com/en-us/download/details.aspx?id=52398) text classification task, you can run the following command:
