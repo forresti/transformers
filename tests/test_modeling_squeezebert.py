@@ -270,8 +270,8 @@ class SqueezeBertModelTest(ModelTesterMixin, unittest.TestCase):
             model = SqueezeBertModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
-class SqueezeBertModelIntegrationTest(unittest.TestCase):
 
+class SqueezeBertModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_classification_head(self):
         model = SqueezeBertForSequenceClassification.from_pretrained("squeezebert/squeezebert-mnli")
@@ -280,5 +280,5 @@ class SqueezeBertModelIntegrationTest(unittest.TestCase):
         output = model(input_ids)[0]
         expected_shape = torch.Size((1, 3))
         self.assertEqual(output.shape, expected_shape)
-        expected_tensor = torch.tensor([[0.5075,  0.0682, -0.5881]])
+        expected_tensor = torch.tensor([[0.5075, 0.0682, -0.5881]])
         self.assertTrue(torch.allclose(output, expected_tensor, atol=1e-4))

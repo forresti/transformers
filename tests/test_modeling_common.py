@@ -550,7 +550,7 @@ class ModelTesterMixin:
             else:
                 seq_length = self.model_tester.seq_length
 
-            if 'modeling_squeezebert' in str(model_class):
+            if "modeling_squeezebert" in str(model_class):
                 """
                 Note that hidden_states dimemsions of SqueezeBertEncoder are transposed
                 compared to other models. That's because SqueezeBert uses nn.Conv1d insead
