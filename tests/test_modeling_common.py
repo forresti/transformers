@@ -550,10 +550,21 @@ class ModelTesterMixin:
             else:
                 seq_length = self.model_tester.seq_length
 
-            self.assertListEqual(
-                list(hidden_states[0].shape[-2:]),
-                [seq_length, self.model_tester.hidden_size],
-            )
+            if 'modeling_squeezebert' in str(model_class):
+                """
+                Note that hidden_states dimemsions of SqueezeBertEncoder are transposed
+                compared to other models. That's because SqueezeBert uses nn.Conv1d insead
+                of nn.Linear, and nn.Conv1d has a different data layout.
+                """
+                self.assertListEqual(
+                    list(hidden_states[0].shape[-2:]),
+                    [self.model_tester.hidden_size, seq_length],
+                )
+            else:
+                self.assertListEqual(
+                    list(hidden_states[0].shape[-2:]),
+                    [seq_length, self.model_tester.hidden_size],
+                )
 
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 

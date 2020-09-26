@@ -333,8 +333,6 @@ class SqueezeBertEncoder(nn.Module):
         hidden_states,
         attention_mask=None,
         head_mask=None,
-        encoder_hidden_states=None,
-        encoder_attention_mask=None,
         output_attentions=False,
         output_hidden_states=False,
         return_dict=False,
@@ -346,19 +344,11 @@ class SqueezeBertEncoder(nn.Module):
             head_mask_is_all_none = True
         else:
             head_mask_is_all_none = False
-
         assert head_mask_is_all_none is True, "head_mask is not yet supported in the SqueezeBert implementation."
-        assert (
-            encoder_hidden_states is None
-        ), "encoder_hidden_states is not yet supported in the SqueezeBert implementation."
-        assert encoder_attention_mask is None, (
-            "encoder_attention_mask is not yet supported in the SqueezeBert implementation."
-            "However, note that attention_mask is supported."
-        )
 
         hidden_states = transpose_x(hidden_states)  # [N, W, C] --> [N, C, W]
 
-        all_hidden_states = () if output_hidden_states else None
+        all_hidden_states = (hidden_states,) if output_hidden_states else None
         all_attentions = () if output_attentions else None
 
         for layer in self.layers:
