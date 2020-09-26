@@ -431,21 +431,26 @@ SQUEEZEBERT_START_DOCSTRING = r"""    The SqueezeBERT model was proposed in
             Initializing with a config file does not load the weights associated with the model, only the configuration.
             Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model weights.
 
-    Internal class hierarchy:
-        SqueezeBertEncoder
-            SqueezeBertModule
-            SqueezeBertSelfAttention
-                CA
-                CDL
+    Hierarchy::
 
-    Input data is in [N, W, C] format.
-    Data inside the encoder is in [N, C, W] format.
-    The final output of the encoder is in [N, W, C] format.
+        Internal class hierarchy:
+            SqueezeBertModel
+                SqueezeBertEncoder
+                    SqueezeBertModule
+                    SqueezeBertSelfAttention
+                        CA  (convolution, activation)
+                        CDL (convolution, dropout, layernorm)
 
-    Such that...
-    - N = batch
-    - C = channels (sometimes called "hidden size")
-    - W = seq_len (W is "width" in computer vision CNNs, so we use the same name here)
+    Data layouts::
+
+        Input data is in [N, W, C] format.
+        Data inside the encoder is in [N, C, W] format.
+        The final output of the encoder is in [N, W, C] format.
+
+        Such that...
+        - N = batch
+        - C = channels (sometimes called "hidden size")
+        - W = seq_len (W is "width" in computer vision convolutional neural networks, so we use the same name here)
 """
 
 SQUEEZEBERT_INPUTS_DOCSTRING = r"""

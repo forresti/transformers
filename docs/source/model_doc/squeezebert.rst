@@ -7,10 +7,11 @@ Overview
 The SqueezeBERT model was proposed in
 `SqueezeBERT: What can computer vision teach NLP about efficient neural networks?
 <https://arxiv.org/abs/2006.11316>`__
-Forrest N. Iandola, Albert E. Shaw, Ravi Krishna, Kurt W. Keutzer.
+by Forrest N. Iandola, Albert E. Shaw, Ravi Krishna, Kurt W. Keutzer.
 It's a bidirectional transformer similar to the BERT model.
 The key difference between the BERT architecture and the SqueezeBERT architecture
-is that SqueezeBERT uses grouped convolutions instead of fully-connected layers for the Q, K, V and FFN layers.
+is that SqueezeBERT uses `grouped convolutions <https://blog.yani.io/filter-group-tutorial>`__
+instead of fully-connected layers for the Q, K, V and FFN layers.
 
 The abstract from the paper is the following:
 
