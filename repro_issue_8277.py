@@ -1,8 +1,8 @@
 from torch import nn
 from transformers import AutoModelForMaskedLM, AutoTokenizer
 
-model = AutoModelForMaskedLM.from_pretrained('squeezebert/squeezebert-mnli')
-tokenizer = AutoTokenizer.from_pretrained('squeezebert/squeezebert-mnli')
+model = AutoModelForMaskedLM.from_pretrained('squeezebert/squeezebert-uncased')
+tokenizer = AutoTokenizer.from_pretrained('squeezebert/squeezebert-uncased')
 
 #model.tie_weights()
 input_txt = ["[MASK] was an American [MASK]  and lawyer who served as the 16th president  of the United States from 1861 to 1865. [MASK] led the nation through the American Civil War, the country's greatest [MASK], [MASK], and [MASK] crisis. ", \
